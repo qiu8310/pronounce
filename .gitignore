@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.ruff_cache
 
 # Virtual Environment. `.venv` is a symlink into $MODELS_HOME/.venv, so it
 # must be listed without a trailing slash or git treats it as a file.
