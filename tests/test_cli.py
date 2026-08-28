@@ -11,16 +11,17 @@ from pronounce.paths import kokoro_model, models_home, spacy_dir, wav2vec2_model
 
 
 class TestCliGuards(unittest.TestCase):
-    def test_acoustic_requires_ref(self):
+    def test_acoustic_without_ref_still_needs_user_wav(self):
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            code = main(["score", "acoustic", "--text", "hi", "--user", "/tmp/x.wav"])
+            code = main(["score", "acoustic", "--text", "hi", "--user", "/tmp/no-such-take.wav"])
         self.assertEqual(code, 1)
         data = json.loads(buf.getvalue())
         self.assertFalse(data["ok"])
         self.assertEqual(data["engine"], "acoustic")
-        self.assertIn("ref", data["error"].lower())
+        self.assertIn("user", data["error"].lower())
+        self.assertNotIn("requires --ref", data["error"].lower())
 
     def test_argparse_missing_text_json_exit_1(self):
         import contextlib
@@ -41,7 +42,7 @@ class TestCliGuards(unittest.TestCase):
         self.assertEqual(code, 0)
         out = buf.getvalue()
         self.assertIn("engine", out)
-        self.assertIn("TTS and G2P", out)
+        self.assertIn("ipa", out.lower())
 
     def test_tts_requires_out(self):
         import contextlib
@@ -62,6 +63,46 @@ class TestCliGuards(unittest.TestCase):
         data = json.loads(buf.getvalue())
         self.assertFalse(data["ok"])
         self.assertIn("text", data["error"].lower())
+
+    def test_phonemes_returns_readable_ipa(self):
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["phonemes", "--text", "Hello, how are you?"])
+        self.assertEqual(code, 0)
+        data = json.loads(buf.getvalue())
+        self.assertTrue(data["ok"])
+        self.assertIn("ipa", data)
+        self.assertIn("words", data)
+        self.assertGreater(len(data["words"]), 1)
+        self.assertIn("oʊ", data["ipa"] + "".join(w["ipa"] for w in data["words"]))
+        self.assertNotIn("O", data["ipa"])
+
+    def test_tts_rejects_invalid_speed(self):
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["tts", "--text", "hi", "--out", "/tmp/x.wav", "--speed", "0"])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        self.assertNotIn("unrecognized", data["error"].lower())
+        self.assertIn("speed", data["error"].lower())
+
+    def test_score_accepts_calibration_flag(self):
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main([
+                "score", "phoneme", "--text", "hi",
+                "--user", "/tmp/no-such-take.wav",
+                "--calibration", "/tmp/cal.json",
+            ])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        self.assertNotIn("unrecognized", data["error"].lower())
+        self.assertIn("user", data["error"].lower())
 
 
 class TestModelsHome(unittest.TestCase):
@@ -97,6 +138,14 @@ class TestKokoroLang(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             phonemize("  ")
+
+    def test_listen_sample_rate_slows_playback(self):
+        from pronounce.kokoro import KOKORO_SAMPLE_RATE, listen_sample_rate
+
+        self.assertEqual(listen_sample_rate(1.0), KOKORO_SAMPLE_RATE)
+        self.assertEqual(listen_sample_rate(0.8), int(round(KOKORO_SAMPLE_RATE * 0.8)))
+        with self.assertRaises(ValueError):
+            listen_sample_rate(0.0)
 
 
 if __name__ == "__main__":

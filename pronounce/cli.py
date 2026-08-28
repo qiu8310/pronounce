@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 from pronounce.paths import wav2vec2_model
@@ -48,15 +50,16 @@ def _cmd_schema(_args: argparse.Namespace) -> int:
 def _cmd_tts(args: argparse.Namespace) -> int:
     out = Path(args.out).expanduser().resolve()
     try:
-        from pronounce.kokoro import KOKORO_SAMPLE_RATE, synthesize
+        from pronounce.kokoro import KOKORO_SAMPLE_RATE, listen_sample_rate, synthesize
 
+        rate = listen_sample_rate(args.speed, KOKORO_SAMPLE_RATE)
         audio = synthesize(
             args.text, voice=args.voice, lang=args.lang, device=args.device
         )
         import soundfile as sf
 
         out.parent.mkdir(parents=True, exist_ok=True)
-        sf.write(str(out), audio, KOKORO_SAMPLE_RATE)
+        sf.write(str(out), audio, rate)
         print(
             json.dumps(
                 {
@@ -66,7 +69,9 @@ def _cmd_tts(args: argparse.Namespace) -> int:
                     "voice": args.voice,
                     "lang": args.lang,
                     "out": str(out),
-                    "sample_rate": KOKORO_SAMPLE_RATE,
+                    "speed": args.speed,
+                    "sample_rate": rate,
+                    "native_rate": KOKORO_SAMPLE_RATE,
                 }
             )
         )
@@ -77,9 +82,9 @@ def _cmd_tts(args: argparse.Namespace) -> int:
 
 def _cmd_phonemes(args: argparse.Namespace) -> int:
     try:
-        from pronounce.kokoro import phonemize
+        from pronounce.ipa import ipa_for_text
 
-        phonemes = phonemize(args.text, lang=args.lang)
+        payload = ipa_for_text(args.text, lang=args.lang)
         print(
             json.dumps(
                 {
@@ -87,7 +92,7 @@ def _cmd_phonemes(args: argparse.Namespace) -> int:
                     "command": "phonemes",
                     "text": args.text,
                     "lang": args.lang,
-                    "phonemes": phonemes,
+                    **payload,
                 }
             )
         )
@@ -96,11 +101,23 @@ def _cmd_phonemes(args: argparse.Namespace) -> int:
         return _fail_plain(str(e))
 
 
+def _synthesize_ref(args: argparse.Namespace) -> Path:
+    """Write a native-speed Kokoro wav and return its path."""
+    from pronounce.kokoro import KOKORO_SAMPLE_RATE, synthesize
+    import soundfile as sf
+
+    audio = synthesize(
+        args.text, voice=args.voice, lang=args.lang, device=args.device
+    )
+    fd, tmp = tempfile.mkstemp(suffix=".wav", prefix="pronounce-ref-")
+    os.close(fd)
+    path = Path(tmp)
+    sf.write(str(path), audio, KOKORO_SAMPLE_RATE)
+    return path
+
+
 def _cmd_score(args: argparse.Namespace) -> int:
     engine = args.engine
-    if engine == "acoustic" and not args.ref:
-        return _fail(engine, "the acoustic engine requires --ref")
-
     model_name = str(
         wav2vec2_model(
             "wav2vec2-xlsr-53-espeak-cv-ft"
@@ -114,6 +131,7 @@ def _cmd_score(args: argparse.Namespace) -> int:
 
     user_path = Path(args.user).resolve()
     ref_path = Path(args.ref).resolve() if args.ref else None
+    ref_generated = False
 
     if not user_path.is_file():
         return _fail(engine, f"user audio not found: {user_path}")
@@ -123,6 +141,11 @@ def _cmd_score(args: argparse.Namespace) -> int:
     try:
         from pronounce.common.audio import TARGET_SAMPLE_RATE, prepare_waveform
         from pronounce.json_out import to_payload
+        from pronounce.prosody import compute_prosody, user_only_prosody
+
+        if engine == "acoustic" and ref_path is None:
+            ref_path = _synthesize_ref(args)
+            ref_generated = True
 
         user_audio, user_sr = _load_wav(str(user_path))
         user_audio = prepare_waveform(user_audio, user_sr)
@@ -140,11 +163,14 @@ def _cmd_score(args: argparse.Namespace) -> int:
         else:
             from pronounce.acoustic import AnalyzerConfig, analyze, configure, load_models
 
+        cal = Path(args.calibration).expanduser().resolve() if args.calibration else None
         configure(
             AnalyzerConfig(
                 model_name=model_name,
                 device=args.device,
                 espeak_language=args.lang,
+                user_name=args.user_name or "",
+                calibration_file=cal,
             )
         )
         load_models()
@@ -155,13 +181,22 @@ def _cmd_score(args: argparse.Namespace) -> int:
             user_sr=user_sr,
             reference_sr=reference_sr,
         )
+        if reference_audio is not None:
+            contours = compute_prosody(
+                user_audio, user_sr, reference_audio, reference_sr
+            )
+        else:
+            contours = user_only_prosody(user_audio, user_sr)
         payload = to_payload(
             engine=engine,
             result=result,
             text=args.text,
             user_wav=str(user_path),
             ref_wav=str(ref_path) if ref_path is not None else None,
+            prosody=contours,
         )
+        if ref_generated:
+            payload["ref_generated"] = True
         print(json.dumps(payload))
         return 0
     except Exception as e:
@@ -206,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
     score.add_argument("--ref", default=None)
     score.add_argument("--lang", default="en-us")
     score.add_argument("--device", default="cpu")
+    score.add_argument("--voice", default="af_heart", help="Kokoro voice when --ref is omitted (acoustic)")
+    score.add_argument("--calibration", default=None, help="per-user calibration.json")
+    score.add_argument("--user-name", default="", dest="user_name")
     score.set_defaults(func=_cmd_score)
 
     schema = sub.add_parser("schema", help="print FIELDS.md")
@@ -217,9 +255,10 @@ def main(argv: list[str] | None = None) -> int:
     tts.add_argument("--voice", default="af_heart")
     tts.add_argument("--lang", default="en-us")
     tts.add_argument("--device", default="cpu")
+    tts.add_argument("--speed", type=float, default=1.0, help="playback tempo; 0.8 is slower (lower wav sample rate)")
     tts.set_defaults(func=_cmd_tts)
 
-    phonemes = sub.add_parser("phonemes", help="grapheme-to-phoneme via Kokoro/misaki")
+    phonemes = sub.add_parser("phonemes", help="dictionary IPA for people to read")
     phonemes.add_argument("--text", required=True)
     phonemes.add_argument("--lang", default="en-us")
     phonemes.set_defaults(func=_cmd_phonemes)

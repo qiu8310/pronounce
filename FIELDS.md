@@ -3,7 +3,7 @@
 Stdout is one JSON object per invocation.
 
 - `score`: envelope below. Failure: `{"ok": false, "engine": "...", "error": "..."}`.
-- `tts` / `phonemes`: see [TTS and G2P](#tts-and-g2p). Failure: `{"ok": false, "error": "..."}`.
+- `tts` / `phonemes`: see [TTS and IPA](#tts-and-ipa). Failure: `{"ok": false, "error": "..."}`.
 
 ## Always present (success)
 
@@ -24,7 +24,7 @@ Stdout is one JSON object per invocation.
 | `word_diff` | object[] | `[]` when recognition matches the target | GUI-style expected/heard diffs |
 | `reference_words` | object[] | `[]` when none | Per target-phrase word tags |
 | `recognized_units` | object[] | `[]` when none | Heard units (phones or words) |
-| `prosody` | object | always `{}` in this CLI | Empty here; Mimora host fills contours |
+| `prosody` | object | user-only when `--ref` omitted | `f0`, `energy`, `ref_f0`, `ref_energy` contours |
 | `phoneme` | object | `{}` when engine is acoustic | Phoneme-engine diagnostics |
 | `acoustic` | object | `{}` when engine is phoneme | Acoustic-engine diagnostics |
 
@@ -261,9 +261,11 @@ Empty `{}` when `engine` is `phoneme`. Otherwise:
 }
 ```
 
-## TTS and G2P
+## TTS and IPA
 
 These commands do not use the score envelope. Success still prints one JSON object.
+
+Acoustic score without `--ref` synthesizes a native-speed Kokoro wav, sets `ref_wav` to that temp path, and sets `ref_generated` to `true`.
 
 ### `tts`
 
@@ -271,13 +273,19 @@ These commands do not use the score envelope. Success still prints one JSON obje
 |-------|------|---------|
 | `ok` | bool | `true` |
 | `command` | `"tts"` | Which subcommand ran |
-| `text` | string | `--text` |
+| `text` | string | `--text` (word, sentence, or paragraph) |
 | `voice` | string | `--voice` (default `af_heart`) |
 | `lang` | string | `--lang` (`en-us` / `en-gb`) |
-| `out` | string | Absolute `--out` path (24 kHz wav written here) |
-| `sample_rate` | number | Always `24000` |
+| `out` | string | Absolute `--out` path |
+| `speed` | number | Playback tempo (`1` = native; `0.8` = slower) |
+| `sample_rate` | number | Wav header rate (`native_rate * speed`) |
+| `native_rate` | number | Always `24000` (synthesis rate) |
+
+`--speed` does not change the mouth timing of the model; it writes a lower sample rate so a normal player plays the file slower (same trick mimora uses for slow listen). Scoring reference audio is always synthesized at `speed=1`.
 
 ### `phonemes`
+
+Dictionary IPA for people to read (espeak-ng, stress kept). One `words[]` row per whitespace token, so a paragraph stays aligned with the page.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -285,4 +293,5 @@ These commands do not use the score envelope. Success still prints one JSON obje
 | `command` | `"phonemes"` | Which subcommand ran |
 | `text` | string | `--text` |
 | `lang` | string | `--lang` |
-| `phonemes` | string | misaki American/British encoding (not espeak IPA) |
+| `ipa` | string | Space-joined IPA for the whole text |
+| `words` | object[] | `{"word", "ipa"}` per `text.split()` token |

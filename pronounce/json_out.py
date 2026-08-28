@@ -10,6 +10,7 @@ def to_payload(
     text: str,
     user_wav: str,
     ref_wav: str | None,
+    prosody: dict | None = None,
 ) -> dict:
     phoneme: dict
     acoustic: dict
@@ -57,7 +58,7 @@ def to_payload(
         "word_diff": result.word_diff,
         "reference_words": result.reference_words,
         "recognized_units": result.recognized_units,
-        "prosody": {},
+        "prosody": dict(prosody) if prosody else {},
         "phoneme": phoneme,
         "acoustic": acoustic,
     }

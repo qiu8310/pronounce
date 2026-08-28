@@ -40,19 +40,23 @@ class TestToPayload(unittest.TestCase):
         for key in _ENVELOPE_KEYS:
             self.assertIn(key, d)
 
-    def test_prosody_always_empty_even_when_result_has_data(self):
+    def test_host_prosody_is_passed_through(self):
         r = PronunciationResult(
             score=80.0,
             word_errors=[],
-            prosody={"f0": [1.0, 2.0], "energy": [0.5]},
+            prosody={},
             transcription="hello",
             passed=True,
             bucket=4,
             grade="4",
             ipa_words=[],
         )
-        d = to_payload(engine="phoneme", result=r, text="hello", user_wav="/u.wav", ref_wav=None)
-        self.assertEqual(d["prosody"], {})
+        contours = {"f0": [1.0, 2.0], "energy": [0.5], "ref_f0": [3.0], "ref_energy": [0.2]}
+        d = to_payload(
+            engine="phoneme", result=r, text="hello", user_wav="/u.wav",
+            ref_wav=None, prosody=contours,
+        )
+        self.assertEqual(d["prosody"], contours)
 
     def test_acoustic_envelope_swaps_blocks(self):
         r = PronunciationResult(

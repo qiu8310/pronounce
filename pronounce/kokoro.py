@@ -88,3 +88,10 @@ def synthesize(text: str, voice: str = DEFAULT_VOICE, lang: str = "en-us",
     if not chunks:
         return np.zeros(0, dtype=np.float32)
     return np.concatenate(chunks)
+
+
+def listen_sample_rate(speed: float, native: int = KOKORO_SAMPLE_RATE) -> int:
+    """Wav sample rate that plays *speed* times native tempo (mimora tape-slow)."""
+    if speed <= 0 or speed > 2:
+        raise ValueError(f"speed must be in (0, 2], got {speed}")
+    return max(1, int(round(native * speed)))
