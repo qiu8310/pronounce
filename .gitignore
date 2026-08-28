@@ -28,6 +28,7 @@ records/
 *.wav
 *.mp3
 *.flac
+!demo/*.wav
 
 # Logs
 *.log

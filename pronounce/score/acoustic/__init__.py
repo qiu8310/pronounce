@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Valeriy Kovalev
 
-"""Mimora pronunciation analysis package.
+"""Mimora 声学发音分析包。
 
-Reuses the OpenPronounce (MIT) acoustic/phoneme comparison core as a library.
-The single entry point is ``analyze``; ``load_models`` / ``warm_up`` manage the
-Wav2Vec2 model lifecycle (call them in a background thread at mode startup).
+把 OpenPronounce（MIT）的声学对比核当库来用。唯一入口是 ``analyze``；
+``load_models`` / ``warm_up`` 管 Wav2Vec2 生命周期（模式启动时在后台线程调用）。
 
-The package is GUI- and application-agnostic: settings come from its own
-``AnalyzerConfig``. A host injects values once at startup with ``configure()``;
-without it the built-in defaults keep the package fully autonomous.
+本包不依赖 GUI / 宿主：设置来自自己的 ``AnalyzerConfig``。宿主启动时
+``configure()`` 注入一次；不注入则用内置默认，包可以单独跑。
 """
 
 from .config import AnalyzerConfig, configure, get_config

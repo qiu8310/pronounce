@@ -22,6 +22,8 @@ Shared interpreter with mimora: `$MODELS_HOME/.venv` (Python 3.12). `mimora/.ven
 "$MODELS_HOME/.venv/bin/python" -m pronounce schema
 ```
 
+Copy-paste examples with the sample wavs in [`demo/`](demo/README.md).
+
 | Flag | Meaning |
 |------|---------|
 | `--text` | English word, sentence, or paragraph |

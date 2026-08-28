@@ -1,3 +1,5 @@
+"""词典 IPA：空文本拒绝；段落按空白 token 一行。"""
+
 import unittest
 
 from pronounce.phonemes import ipa_for_text

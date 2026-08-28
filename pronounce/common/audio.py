@@ -1,19 +1,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Valeriy Kovalev
 
-"""Shared, torch-free waveform helpers for the pronunciation stack.
+"""发音栈共用的、不依赖 torch 的波形处理。
 
-Both engines (``pronounce.score.acoustic`` / ``pronounce.score.phoneme``) and the
-host's prosody layer (``mimora/prosody.py``) must prepare audio identically:
-the score and the prosody contours have to be measured on the same signal.
-Mirroring them per module keeps the layering intact (the engines must not
-import from ``mimora``) but lets the three copies drift apart. This module is
-the single shared copy instead: it lives beside ``PronunciationResult`` in
-``pronounce.common``, which everything is already allowed to depend on.
+声学 / 音素两个引擎以及宿主的语调层（mimora/prosody.py）必须用同一套预处理：
+分数和语调曲线要测在同一段信号上。如果各写一份，时间一长就会漂移。
+本模块是唯一副本，放在 ``pronounce.common`` 里，大家都允许依赖。
 
-Deliberately free of torch/transformers, and librosa is imported lazily inside
-the functions, so importing this module never pulls in the heavy ML stack -
-the same constraint ``mimora/prosody.py`` documents for itself.
+刻意不用 torch/transformers；librosa 在函数内部才 import（惰性导入），
+这样 ``import pronounce.common.audio`` 不会把整套 ML 栈拉进来。
 """
 
 from __future__ import annotations
@@ -22,39 +17,37 @@ import hashlib
 
 import numpy as np
 
-# The Wav2Vec2 recognizers and the prosody analysis expect strictly 16 kHz mono;
-# every waveform is resampled to this rate before use.
+# Wav2Vec2 识别器和语调分析都要求严格 16 kHz 单声道。
 TARGET_SAMPLE_RATE = 16_000
 
-# Silence-trim threshold relative to the peak, in dB. Shared so the trimmed
-# signal - and therefore the scores and the contours - line up across modules.
+# 相对峰值的静音裁剪阈值（dB）。三处共用，裁完的信号才能对得上。
 TRIM_TOP_DB = 30
 
+
 def prepare_waveform(waveform: np.ndarray, orig_sr: int) -> np.ndarray:
-    """Return a 1-D float32 mono waveform resampled to TARGET_SAMPLE_RATE."""
-    import librosa
+    """把任意布局的波形变成 1 维 float32 单声道，并重采样到 TARGET_SAMPLE_RATE。"""
+    import librosa  # 惰性导入：调用时才加载，模块 import 保持轻量
 
     wav = np.asarray(waveform, dtype=np.float32)
 
-    # Down-mix to mono. Loaders disagree about layout: soundfile returns
-    # [samples, channels] while torch-based ones return [channels, samples],
-    # so average along whichever axis is smaller (the channels).
+    # 混成单声道。加载器布局不统一：soundfile 是 [采样, 声道]，
+    # torch 系常是 [声道, 采样]，所以沿更短的那一轴（声道轴）求平均。
     if wav.ndim > 1:
         wav = wav.mean(axis=int(np.argmin(wav.shape)))
 
     if orig_sr != TARGET_SAMPLE_RATE:
         wav = librosa.resample(wav, orig_sr=orig_sr, target_sr=TARGET_SAMPLE_RATE)
 
+    # ascontiguousarray：保证内存连续（C 顺序），后续传给 C 扩展 / 哈希时更稳。
     return np.ascontiguousarray(wav, dtype=np.float32)
 
-def trim_silence(wav: np.ndarray) -> np.ndarray:
-    """Cut leading/trailing silence so pauses don't distort scores or contours.
 
-    Matters especially for the user recording: peak normalization in the
-    capture path boosts the noise floor of quiet takes, turning silent padding
-    into loud noise with no counterpart in the clean TTS reference. Keeps the
-    original audio when trimming would leave less than 0.1 s (i.e. near-silent
-    input).
+def trim_silence(wav: np.ndarray) -> np.ndarray:
+    """裁掉首尾静音，避免空白把分数和语调曲线拉歪。
+
+    用户录音尤其需要：采集端峰值归一化会抬高安静片段的底噪，
+    静音填充会变成「很响的噪声」，干净的 TTS 参考里没有对应物。
+    若裁完不足 0.1 秒（几乎全是静音）则原样返回。
     """
     import librosa
 
@@ -65,15 +58,14 @@ def trim_silence(wav: np.ndarray) -> np.ndarray:
         return wav
     return np.ascontiguousarray(trimmed, dtype=np.float32)
 
-def waveform_digest(waveform: np.ndarray) -> bytes:
-    """Stable content digest of a waveform, for cache keys.
 
-    The reference caches (embeddings, recognized phonemes, prosody contours)
-    need a content identity for the same waveform across repeated attempts.
-    Hashing through a memoryview avoids materializing an intermediate bytes
-    copy of the whole waveform (unlike ``hash(arr.tobytes())``), and a real
-    SHA-1 digest - unlike Python's 64-bit ``hash()`` - makes cache-key
-    collisions a non-concern.
+def waveform_digest(waveform: np.ndarray) -> bytes:
+    """波形内容的稳定摘要，用来当缓存键。
+
+    参考音频的嵌入 / 识别音素 / 语调曲线都要按「同一段波形」复用。
+    用 memoryview 再 .cast("B") 按字节视图哈希，避免 arr.tobytes() 再拷一份整段音频。
+    SHA-1 是真正的内容摘要；Python 内置 hash() 只有 64 位且进程间不稳定。
     """
     arr = np.ascontiguousarray(waveform)
+    # memoryview(...).cast("B")：把数组看成无类型字节序列，不复制数据。
     return hashlib.sha1(memoryview(arr).cast("B")).digest()

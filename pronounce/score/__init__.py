@@ -1,4 +1,8 @@
-"""Score a spoken take (phoneme or acoustic engine)."""
+"""给口语跟读打分：音素引擎或声学引擎。
+
+``add_parser`` 把 ``score`` 子命令挂到 CLI；``run`` 负责读 wav、可选地用
+Kokoro 合成参考音、调对应引擎的 ``analyze``，再把结果打成 stdout JSON。
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from pronounce.paths import wav2vec2_model
 
 
 def add_parser(sub: argparse._SubParsersAction) -> None:
+    """注册 ``score {phoneme|acoustic}`` 及其参数。"""
     score = sub.add_parser("score", help="score a spoken take")
     score.add_argument("engine", choices=("phoneme", "acoustic"))
     score.add_argument("--text", required=True)
@@ -25,14 +30,19 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         help="Kokoro voice when --ref is omitted (acoustic)",
     )
     score.add_argument("--calibration", default=None, help="per-user calibration.json")
+    # dest="user_name"：命令行是 --user-name，Python 里属性名不能带连字符。
     score.add_argument("--user-name", default="", dest="user_name")
     score.set_defaults(func=run)
 
+
 def _fail(engine: str, error: str) -> int:
+    """失败时打 JSON 并返回退出码 1。"""
     print(json.dumps({"ok": False, "engine": engine, "error": error}))
     return 1
 
+
 def _check_model_dir(engine: str, model_dir: str) -> str | None:
+    """检查是否为可用的 Hugging Face ``from_pretrained`` 根目录；OK 则返回 None。"""
     root = Path(model_dir)
     if not root.is_dir() or not (root / "config.json").is_file():
         return (
@@ -41,13 +51,17 @@ def _check_model_dir(engine: str, model_dir: str) -> str | None:
         )
     return None
 
+
 def _load_wav(path: str):
+    """读 wav，返回 (ndarray, 采样率)。always_2d=False 让单声道保持一维。"""
     import soundfile as sf
 
     data, sr = sf.read(path, dtype="float32", always_2d=False)
     return data, int(sr)
 
+
 def _synthesize_ref(args: argparse.Namespace) -> Path:
+    """声学引擎没给 --ref 时，用 Kokoro 合成一段参考音，写到临时 wav。"""
     import soundfile as sf
 
     from pronounce.tts import KOKORO_SAMPLE_RATE, synthesize
@@ -55,13 +69,17 @@ def _synthesize_ref(args: argparse.Namespace) -> Path:
     audio = synthesize(
         args.text, voice=args.voice, lang=args.lang, device=args.device
     )
+    # mkstemp 返回 (fd, path)；立刻 close(fd)，后面用 soundfile 按路径写，
+    # 避免文件描述符一直占着。
     fd, tmp = tempfile.mkstemp(suffix=".wav", prefix="pronounce-ref-")
     os.close(fd)
     path = Path(tmp)
     sf.write(str(path), audio, KOKORO_SAMPLE_RATE)
     return path
 
+
 def run(args: argparse.Namespace) -> int:
+    """跑一次打分。成功打印 payload JSON，返回 0。"""
     engine = args.engine
     model_name = str(
         wav2vec2_model(
@@ -103,6 +121,8 @@ def run(args: argparse.Namespace) -> int:
             reference_audio = prepare_waveform(reference_audio, reference_sr)
             reference_sr = TARGET_SAMPLE_RATE
 
+        # 两个引擎的公开 API 同名（analyze / configure / load_models），
+        # 按 engine 选包即可，后面调用不用再分支。
         if engine == "phoneme":
             from pronounce.score.phoneme import (
                 AnalyzerConfig,

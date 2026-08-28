@@ -1,4 +1,7 @@
-"""English TTS (Kokoro)."""
+"""英文 TTS（Kokoro）。
+
+``add_parser`` 注册 ``tts`` 子命令；合成实现在 ``pronounce.tts.kokoro``。
+"""
 
 from __future__ import annotations
 
@@ -28,7 +31,9 @@ __all__ = [
     "voice_path",
 ]
 
+
 def add_parser(sub: argparse._SubParsersAction) -> None:
+    """注册 ``tts``：必填 --text / --out，可选音色、口音、设备、播放倍速。"""
     tts = sub.add_parser("tts", help="synthesize English speech with Kokoro")
     tts.add_argument("--text", required=True)
     tts.add_argument("--out", required=True)
@@ -43,7 +48,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     tts.set_defaults(func=run)
 
+
 def run(args: argparse.Namespace) -> int:
+    """合成并写 wav，stdout 打 JSON（含实际采样率和原生 24 kHz）。"""
     out = Path(args.out).expanduser().resolve()
     try:
         rate = listen_sample_rate(args.speed, KOKORO_SAMPLE_RATE)

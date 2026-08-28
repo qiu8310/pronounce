@@ -1,3 +1,8 @@
+"""CLI 防护测试：缺参、缺文件时应打 JSON 并以码 1 退出，而不是 argparse 的 usage。
+
+不加载打分权重；phonemes 那条会用到本机 espeak。
+"""
+
 import io
 import json
 import os
@@ -12,8 +17,10 @@ from pronounce.paths import kokoro_model, models_home, spacy_dir, wav2vec2_model
 
 class TestCliGuards(unittest.TestCase):
     def test_acoustic_without_ref_still_needs_user_wav(self):
+        """声学引擎没 --ref 可以自己合成参考，但用户 wav 仍必须存在。"""
         import contextlib
         buf = io.StringIO()
+        # redirect_stdout：把 print 接到内存缓冲区，便于断言 JSON，不污染测试输出。
         with contextlib.redirect_stdout(buf):
             code = main(["score", "acoustic", "--text", "hi", "--user", "/tmp/no-such-take.wav"])
         self.assertEqual(code, 1)
@@ -24,6 +31,7 @@ class TestCliGuards(unittest.TestCase):
         self.assertNotIn("requires --ref", data["error"].lower())
 
     def test_argparse_missing_text_json_exit_1(self):
+        """缺 --text 时走 JSON 失败，退出码 1（不是 argparse 默认的 2）。"""
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -35,6 +43,7 @@ class TestCliGuards(unittest.TestCase):
         self.assertIn("error", data)
 
     def test_schema_prints_fields(self):
+        """schema 子命令打印 FIELDS.md 原文，不是 JSON。"""
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -65,6 +74,7 @@ class TestCliGuards(unittest.TestCase):
         self.assertIn("text", data["error"].lower())
 
     def test_phonemes_returns_readable_ipa(self):
+        """词典 IPA 应带重音式的 oʊ，而不是大写 O 那种 espeak 内部记号。"""
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -79,6 +89,7 @@ class TestCliGuards(unittest.TestCase):
         self.assertNotIn("O", data["ipa"])
 
     def test_tts_rejects_invalid_speed(self):
+        """speed=0 非法，错误信息应提到 speed，而不是 unrecognized argument。"""
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -90,6 +101,7 @@ class TestCliGuards(unittest.TestCase):
         self.assertIn("speed", data["error"].lower())
 
     def test_score_accepts_calibration_flag(self):
+        """--calibration 应被 argparse 认下；失败原因应是缺用户 wav，不是未知参数。"""
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -107,7 +119,9 @@ class TestCliGuards(unittest.TestCase):
 
 class TestModelsHome(unittest.TestCase):
     def test_models_home_from_env(self):
+        """MODELS_HOME 指向临时目录时，各权重路径都拼在它下面。"""
         with tempfile.TemporaryDirectory() as tmp:
+            # patch.dict：只在 with 块内改 os.environ，退出后恢复，避免污染其他测试。
             with patch.dict(os.environ, {"MODELS_HOME": tmp}):
                 self.assertEqual(models_home(), Path(tmp).resolve())
                 self.assertEqual(
@@ -140,6 +154,7 @@ class TestKokoroLang(unittest.TestCase):
             phonemize("  ")
 
     def test_listen_sample_rate_slows_playback(self):
+        """speed=0.8 应把写出的采样率降到 0.8 倍（磁带减速），而不是改波形。"""
         from pronounce.tts import KOKORO_SAMPLE_RATE, listen_sample_rate
 
         self.assertEqual(listen_sample_rate(1.0), KOKORO_SAMPLE_RATE)

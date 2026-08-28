@@ -1,8 +1,11 @@
+"""to_payload：外壳字段齐全；音素/声学诊断分块，另一块为空。"""
+
 import unittest
 
 from pronounce.common import PronunciationResult
 from pronounce.score.json_out import to_payload
 
+# FIELDS.md 里约定的顶层键；缺任何一个就算破坏合同。
 _ENVELOPE_KEYS = (
     "ok",
     "engine",
@@ -42,6 +45,7 @@ class TestToPayload(unittest.TestCase):
             self.assertIn(key, d)
 
     def test_host_prosody_is_passed_through(self):
+        """宿主算好的语调曲线应原样放进 payload，不被引擎自己的空 prosody 覆盖。"""
         r = PronunciationResult(
             score=80.0,
             word_errors=[],
@@ -60,6 +64,7 @@ class TestToPayload(unittest.TestCase):
         self.assertEqual(d["prosody"], contours)
 
     def test_acoustic_envelope_swaps_blocks(self):
+        """声学引擎：acoustic 块有数，phoneme 块应是空字典。"""
         r = PronunciationResult(
             score=70.0, word_errors=[], prosody={}, transcription="hello",
             acoustic_distance=1, acoustic_per_step=0.2, acoustic_baseline=0.5,
@@ -68,6 +73,7 @@ class TestToPayload(unittest.TestCase):
         self.assertEqual(d["ref_wav"], "/r.wav")
         self.assertEqual(d["acoustic"]["acoustic_per_step"], 0.2)
         self.assertEqual(d["phoneme"], {})
+
 
 if __name__ == "__main__":
     unittest.main()

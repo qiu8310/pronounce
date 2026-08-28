@@ -1,20 +1,17 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Valeriy Kovalev
 
-"""Mimora phoneme pronunciation engine (text-only scoring).
+"""Mimora 音素发音引擎（按文本打分，不必有参考录音）。
 
-The lightweight alternative to the acoustic ``pronunciation/acoustic/`` core: it scores a take
-from the phrase **text** (espeak reference phonemes) plus a wav2vec2 phoneme ASR of
-the user's audio -- no per-phrase reference recording needed to score.
+相对声学核更轻：用短语**文本**（espeak 参考音素）加上用户音频的 wav2vec2
+音素 ASR 来打分——不需要每句都有参考录音。
 
-Public API mirrors ``pronunciation/acoustic/`` so a host can switch between engines through one
-shared call: ``analyze`` is the single entry point; ``load_models`` / ``warm_up``
-manage the recognizer lifecycle (call them in a background thread at mode startup).
-Settings come from this package's own ``AnalyzerConfig``; a host injects values once
-at startup with ``configure()``, and the built-in defaults keep it autonomous.
+公开 API 与声学包对齐，宿主用同一套调用切换引擎：``analyze`` 是唯一入口；
+``load_models`` / ``warm_up`` 管识别器生命周期。设置来自本包 ``AnalyzerConfig``；
+宿主 ``configure()`` 注入一次，默认值保证能独立跑。
 
-This package never touches the GUI; the result it returns is structurally identical
-to ``pronounce.score.acoustic.PronunciationResult`` so the UI stays engine-neutral.
+本包不碰 GUI；返回的结果结构和 ``pronounce.score.acoustic.PronunciationResult``
+相同，UI 对引擎保持中立。
 """
 
 from .config import AnalyzerConfig, configure, get_config

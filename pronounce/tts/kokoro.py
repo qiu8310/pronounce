@@ -1,4 +1,4 @@
-"""Kokoro G2P (misaki + spaCy) and TTS from local llm/ weights."""
+"""Kokoro 的 G2P（misaki + spaCy）和 TTS，权重来自本机 ``llm/``。"""
 
 from __future__ import annotations
 
@@ -12,21 +12,28 @@ from pronounce.paths import kokoro_model
 
 KOKORO_SAMPLE_RATE = 24_000
 DEFAULT_VOICE = "af_heart"
+# Kokoro 内部口音码：美音 a、英音 b。也接受已经是 a/b 的值。
 _LANG = {"en-us": "a", "en-gb": "b", "a": "a", "b": "b"}
 
+
 def lang_code(lang: str) -> str:
+    """把 ``en-us`` / ``en-gb`` 收成 Kokoro 的 ``a`` / ``b``。"""
     code = _LANG.get((lang or "en-us").lower())
     if code is None:
         raise ValueError(f"unknown lang {lang!r}; use en-us or en-gb")
     return code
 
+
 def _root() -> Path:
+    """Kokoro 快照根；缺 config.json 或 .pth 则报错（运行时不下载）。"""
     root = kokoro_model()
     if not (root / "config.json").is_file() or not (root / "kokoro-v1_0.pth").is_file():
         raise FileNotFoundError(f"Kokoro snapshot missing or incomplete at {root}")
     return root
 
+
 def voice_path(voice: str) -> Path:
+    """解析音色：可以是已有的 ``.pt`` 文件路径，或 ``voices/<id>.pt`` 里的 id。"""
     root = _root()
     path = Path(voice)
     if path.suffix == ".pt" and path.is_file():
@@ -36,8 +43,9 @@ def voice_path(voice: str) -> Path:
         raise FileNotFoundError(f"Kokoro voice not found: {pt}")
     return pt
 
+
 def phonemize(text: str, lang: str = "en-us") -> str:
-    """Grapheme-to-phoneme via misaki (spaCy pipeline + espeak fallback)."""
+    """字素→音素：misaki（spaCy 管道 + espeak 兜底）。"""
     text = (text or "").strip()
     if not text:
         raise ValueError("empty text")
@@ -54,9 +62,13 @@ def phonemize(text: str, lang: str = "en-us") -> str:
     phonemes, _tokens = g2p(text)
     return (phonemes or "").strip()
 
+
 def synthesize(text: str, voice: str = DEFAULT_VOICE, lang: str = "en-us",
                device: str = "cpu") -> np.ndarray:
-    """Synthesize *text*; mono float32 at 24 kHz."""
+    """合成 *text*；单声道 float32，24 kHz。
+
+    Kokoro 按句切块生成，这里把各块 ``np.concatenate`` 接成一条波形。
+    """
     text = (text or "").strip()
     if not text:
         raise ValueError("empty text")
@@ -66,6 +78,7 @@ def synthesize(text: str, voice: str = DEFAULT_VOICE, lang: str = "en-us",
 
     root = _root()
     pt = voice_path(voice)
+    # .to(device) 把权重放到 cpu/cuda；.eval() 关掉 dropout 等训练行为。
     model = KModel(
         repo_id="hexgrad/Kokoro-82M",
         config=str(root / "config.json"),
@@ -84,8 +97,9 @@ def synthesize(text: str, voice: str = DEFAULT_VOICE, lang: str = "en-us",
         return np.zeros(0, dtype=np.float32)
     return np.concatenate(chunks)
 
+
 def listen_sample_rate(speed: float, native: int = KOKORO_SAMPLE_RATE) -> int:
-    """Wav sample rate that plays *speed* times native tempo (mimora tape-slow)."""
+    """播放用的 wav 采样率 = 原生速率 × speed（mimora 的「磁带减速」：慢放就降低采样率）。"""
     if speed <= 0 or speed > 2:
         raise ValueError(f"speed must be in (0, 2], got {speed}")
     return max(1, int(round(native * speed)))

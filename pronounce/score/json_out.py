@@ -1,3 +1,9 @@
+"""把 :class:`PronunciationResult` 收成 CLI stdout 的一份 JSON。
+
+字段合同见仓库根的 ``FIELDS.md``。音素诊断进 ``phoneme`` 块，
+声学诊断进 ``acoustic`` 块，另一块留空字典，方便调用方按引擎取。
+"""
+
 from __future__ import annotations
 
 from pronounce.common import PronunciationResult
@@ -12,6 +18,11 @@ def to_payload(
     ref_wav: str | None,
     prosody: dict | None = None,
 ) -> dict:
+    """组装成功响应。
+
+    参数列表里单独的 ``*`` 表示后面全是「仅关键字」参数：
+    必须写 ``to_payload(engine=..., result=...)``，不能按位置传，避免字段对错位。
+    """
     phoneme: dict
     acoustic: dict
     if engine == "phoneme":

@@ -1,4 +1,4 @@
-"""Human-readable English IPA from text (espeak-ng via phonemizer)."""
+"""从英文文本生成给人看的 IPA（espeak-ng，经 phonemizer）。"""
 
 from __future__ import annotations
 
@@ -6,17 +6,17 @@ from pronounce.common.espeak import ensure_espeak
 
 
 def ipa_for_text(text: str, lang: str = "en-us") -> dict:
-    """Return dictionary IPA for *text*: a joined string plus per-word rows.
+    """把 *text* 转成词典 IPA：一整串，外加按词分行。
 
-    One row per ``text.split()`` token so a paragraph stays aligned with the
-    words on the page. Stress marks are kept; this is for people to read, not
-    for the scorer's folded inventory.
+    按 ``text.split()`` 每个 token 一行，段落才能和纸面上的词对齐。
+    保留重音符号；这是给人读的，不是打分器那套折叠后的音素清单。
     """
     text = (text or "").strip()
     if not text:
         raise ValueError("empty text")
     tokens = text.split()
     ensure_espeak()
+    # phonemizer 较重，用到再 import。
     from phonemizer import phonemize
     from phonemizer.separator import Separator
 
@@ -25,10 +25,12 @@ def ipa_for_text(text: str, lang: str = "en-us") -> dict:
         language=lang,
         backend="espeak",
         strip=True,
-        with_stress=True,
+        with_stress=True,           # 保留 ˈ ˌ 等重音标记
         preserve_punctuation=False,
+        # Separator：phone/word/syllable 之间插入什么。全空串 = 音素直接连在一起。
         separator=Separator(phone="", word="", syllable=""),
     )
+    # 传入单个字符串时 phonemize 可能返回 str 而不是 list，这里统一成列表。
     if isinstance(ipa_list, str):
         ipa_list = [ipa_list]
     words = []

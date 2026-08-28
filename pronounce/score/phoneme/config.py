@@ -1,25 +1,19 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Valeriy Kovalev
 
-"""Configuration for the phoneme pronunciation engine.
+"""音素发音引擎的配置。
 
-``pronunciation/phoneme/`` is the text-only alternative to the acoustic ``pronunciation/acoustic/``
-core: it scores a take from the phrase **text** (espeak reference phonemes) and a
-phoneme ASR of the user's audio, with no per-phrase reference recording required.
+相对声学核：用短语**文本**（espeak 参考音素）和用户音频的音素 ASR 打分，
+不需要每句参考录音。
 
-Like ``pronunciation/acoustic/`` it is GUI- and application-agnostic: every tunable lives in
-the small :class:`AnalyzerConfig` below. The library ships with working defaults
-and is fully autonomous -- importing and calling :func:`pronounce.score.phoneme.analyze`
-works without any host. A host injects its own values **once at startup** with
-:func:`configure`, mirroring the ``logging.basicConfig`` / ``pronounce.score.acoustic.configure``
-pattern; later analysis simply reads whatever is active here.
+同样与 GUI / 宿主无关：可调项都在 :class:`AnalyzerConfig`。库自带默认值，
+import 后直接调 :func:`pronounce.score.phoneme.analyze` 即可。宿主启动时
+:func:`configure` 注入一次，之后只读当前配置。
 
-Data-derived scoring constants (the GOOD anchor, recall threshold, axis weights,
-insertion cap/gate, buckets) are NOT here: they live in the per-language model
-calibration next to the engine (``<lang>_model_calibration.json``, committed),
-with a machine-local ``calibration.json`` (gitignored) overriding only the GOOD
-anchor per user - so they stay shared with the eval/calibration tooling and out
-of source.
+数据拟合出来的打分常数（GOOD 锚、召回阈值、轴权重、插入上限、档位）
+不在这里：它们在引擎旁边的按语言模型校准文件
+（``<lang>_model_calibration.json``，入库），本机 ``calibration.json``
+（gitignored）只按用户覆盖 GOOD 锚——这样能和评估/校准工具共享，又不进源码。
 """
 
 from __future__ import annotations
@@ -30,58 +24,43 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class AnalyzerConfig:
-    """Settings consumed by the phoneme pronunciation analyzer.
+    """音素分析器读的设置。frozen=True 表示实例不可变，改配置请重新 configure。"""
 
-    The defaults make the library usable on its own; a host application overrides
-    them by building an ``AnalyzerConfig`` and passing it to :func:`configure`.
-    """
-
-    # wav2vec2 CTC model that emits espeak-style IPA phonemes. Its phone inventory
-    # matches the espeak reference, so there is no inventory mismatch. Heavier than
-    # a word ASR only on first download (~1.2 GB).
+    # 输出 espeak 风格 IPA 音素的 wav2vec2 CTC 模型。音素表和 espeak 参考对齐，
+    # 没有清单不一致的问题。只在首次下载时比词 ASR 更重（约 1.2 GB）。
     model_name: str = "facebook/wav2vec2-xlsr-53-espeak-cv-ft"
-    # Device the recognizer runs on ("cuda"/"cpu").
+    # 识别器设备（"cuda"/"cpu"）。
     device: str = "cpu"
-    # espeak dialect used to phonemize the reference text ("en-us"/"en-gb").
+    # 参考文本转音素用的 espeak 口音（"en-us"/"en-gb"）。
     espeak_language: str = "en-us"
-    # Score (0-100) at or above which a repetition is considered acceptable.
+    # 0-100 分达到或超过此值视为合格。
     score_threshold: float = 70.0
-    # GOOD-anchor mode for the phoneme-quality axis:
-    #   "global"  -- the single PHONEME_GOOD anchor from the model calibration,
-    #                optionally overridden per user by calibration.json; the
-    #                0-5 bucket cutpoints were calibrated under this anchor, so
-    #                production scores and the buckets stay consistent.
-    #   "ceiling" -- per-phrase GOOD = the TTS reference's own per-phone distance,
-    #                so a flawless read maps to 100 for each phrase (the default;
-    #                needs the reference audio, which the host passes in).
-    # A missing/empty reference silently falls back to "global" (never fails).
+    # 音素质量轴的 GOOD 锚模式：
+    #   "global"  -- 模型校准里那一个 PHONEME_GOOD，可被 calibration.json 按用户覆盖；
+    #                0-5 档切点是在这个锚下拟合的，生产分数和档位才对得上。
+    #   "ceiling" -- 每句 GOOD = TTS 参考自己的逐步距离，完美跟读映射到 100
+    #                （默认；需要宿主传入参考音频）。
+    # 参考缺失/为空时静默退回 "global"（不会失败）。
     good_mode: str = "ceiling"
-    # Directory engine logs are written to (kept symmetric with pronunciation/acoustic/).
+    # 引擎日志目录（和声学包对称）。
     log_dir: Path = Path("logs")
-    # Practising user; reserved for per-user calibration ("" when unset).
+    # 当前练习用户；留给按人校准（未设则为 ""）。
     user_name: str = ""
-    # Where the machine-local user calibration is read and written. None keeps
-    # the library autonomous: it falls back to calibration.json beside this
-    # package, which is what standalone use and the eval tooling expect. A host
-    # injects its own path because that file is machine-local STATE, unlike the
-    # committed <lang>_model_calibration.json next to it, and an installed
-    # package's own directory is no place to write state to.
+    # 本机用户校准读写路径。None 时用包旁边的 calibration.json。
+    # 宿主应注入自己的路径：那是机器本地状态，和入库的
+    # <lang>_model_calibration.json 不同，也不该写进已安装包目录。
     calibration_file: Path | None = None
 
-# Active configuration for this process. The default keeps the library
-# autonomous; a host app replaces it once at startup via configure().
+
 _active: AnalyzerConfig = AnalyzerConfig()
 
 
 def configure(cfg: AnalyzerConfig) -> None:
-    """Install the analyzer configuration for this process.
-
-    Call once at startup, before ``load_models()``/``analyze()``. Subsequent
-    analysis reads whatever is active here.
-    """
+    """为本进程安装分析器配置。在 ``load_models()`` / ``analyze()`` 之前调用一次。"""
     global _active
     _active = cfg
 
+
 def get_config() -> AnalyzerConfig:
-    """Return the currently active analyzer configuration."""
+    """返回当前生效的分析器配置。"""
     return _active

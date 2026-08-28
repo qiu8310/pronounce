@@ -1,60 +1,47 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Valeriy Kovalev
 
-"""Point phonemizer at the bundled espeak-ng, for both pronunciation engines.
+"""把 phonemizer 指向 wheel 自带的 espeak-ng，两个打分引擎共用。
 
-Why no system install is needed
-------------------------------
-``phonemizer`` talks to espeak-ng through a shared library, not through the
-``espeak-ng`` executable, and ``espeakng_loader`` ships that library together
-with its data directory as an ordinary wheel. Registering it removes the one
-step of the install that pip cannot perform. A system install stays a valid
-setup - it is what a standalone install of one of these subpackages without
-``espeakng_loader`` falls back to - but it is not required.
+为什么不需要系统安装
+-------------------
+``phonemizer`` 通过共享库跟 espeak-ng 说话，不走 ``espeak-ng`` 可执行文件。
+``espeakng_loader`` 把库和数据目录打进普通 wheel。注册之后，安装流程里
+pip 做不到的那一步就没了。系统安装仍然可用——单独装某个子包、没带
+``espeakng_loader`` 时就会退回到系统库——但不是必须的。
 
-Why the engines register it themselves
---------------------------------------
-``misaki/espeak.py`` (inside Kokoro) does the same thing as an *import side
-effect*, and for a long time that was the only registration in the process.
-It cannot be relied on: Mimora's TTS backends import lazily, so a run that
-never synthesises through Kokoro (Spanish on Supertonic) never imports misaki,
-and the engines are then left with whatever the system happens to provide.
-This module is that registration, done on purpose and shared, so the two
-engines do not carry a copy each.
+为什么引擎要自己注册
+-------------------
+Kokoro 里的 ``misaki/espeak.py`` 在 import 时也会注册，很长一段时间进程里
+只有这一处。不能指望它：Mimora 的 TTS 后端是惰性导入的，一次从不走 Kokoro
+的运行（例如用 Supertonic 合成西班牙语）就不会 import misaki，引擎就只能
+碰运气用系统里有的东西。本模块是刻意、共享的注册，两个引擎各写一份就没必要了。
 
-Layering
---------
-``pronunciation/*`` never imports ``mimora``, so the only imports here are
-``espeakng_loader`` and ``phonemizer`` - and both happen *inside* the
-functions, which keeps importing this module free of third-party code (the
-same constraint ``pronounce.common.audio`` documents for librosa). A
-missing ``espeakng_loader`` is a soft failure: it arrives transitively with
-kokoro/misaki in the full application, but a standalone install of one
-subpackage may not have it, and there a system espeak-ng is the answer.
+分层
+----
+``pronunciation/*`` 从不 import ``mimora``，这里也只依赖 ``espeakng_loader``
+和 ``phonemizer``——而且都在函数内部才 import，这样 ``import`` 本模块不会
+拉进第三方代码（和 ``pronounce.common.audio`` 对 librosa 的约束一样）。
+缺 ``espeakng_loader`` 是软失败：完整应用会经 kokoro/misaki 间接装上它，
+但单独装一个子包时可能没有，那时就靠系统 espeak-ng。
 
-Both values or neither
-----------------------
-``set_library()`` and ``set_data_path()`` are always set together. Setting only
-the library looks like it works and then dies inside the C library with an
-access violation rather than an exception: ``EspeakAPI`` copies the library to
-a temporary directory and loads the copy, passing the data path separately, so
-the data directory is never found "next to" the loaded library.
+两个值必须一起设
+---------------
+``set_library()`` 和 ``set_data_path()`` 总是成对设置。只设库看起来能跑，
+然后会在 C 库里以访问违例死掉、而不是 Python 异常：``EspeakAPI`` 会把库
+拷到临时目录再加载拷贝，数据路径是另传的，所以数据目录不会「就在库旁边」。
 
-Diagnostics
------------
-The registration must never swallow its exceptions silently: that makes a
-failure indistinguishable from success, because the process carries on with a
-system espeak-ng if one exists and quietly scores against a different
-transcription if one does not. Hence the INFO/WARNING pair - the same idea as
-the "spaCy pipeline ... resolves from" line in ``mimora/app.py``.
+诊断
+----
+注册失败绝不能默默吞掉：否则成功和失败分不清——进程会继续用系统 espeak-ng
+（如果有），转写可能和校准用的那套不一样；没有的话更糟。所以打 INFO/WARNING。
 
-Also runnable, which is what ``install.py``'s ``step_espeak`` uses::
+也可当脚本跑，``install.py`` 的 ``step_espeak`` 就是这样用的::
 
     python -m pronounce.common.espeak
 
-That form matters because the answer belongs to the *target* environment: an
-installer that imported this module itself would report on the interpreter it
-happens to run under.
+必须用 ``-m`` 跑目标环境里的解释器：installer 自己 import 本模块的话，
+报告的是 installer 那个解释器，不是用户真正用来打分的那个。
 """
 
 from __future__ import annotations
@@ -62,20 +49,17 @@ from __future__ import annotations
 import logging
 import sys
 
-# The outcome of the single registration attempt: None until it has been made,
-# then True/False for good, so repeat calls from the analysis path cost nothing
-# and answer consistently. Registration is idempotent, so a race between two
-# threads can at worst do the same assignment twice.
+# 单次注册的结果：None 表示还没试过，之后是 True/False。
+# 重复调用直接返回上次结果。注册幂等，两线程抢着跑最多赋两次同样的值。
 _bundled_registered: bool | None = None
 
 
 def ensure_espeak() -> bool:
-    """Register the bundled espeak-ng with phonemizer once. Never raises.
+    """向 phonemizer 注册自带的 espeak-ng，只做一次。永不抛异常。
 
-    Returns True when the bundled library was registered, False when it was
-    not - in which case phonemizer falls back to ``PHONEMIZER_ESPEAK_LIBRARY``
-    or to a system install, either of which may still work. Idempotent: only
-    the first call does anything, and later calls repeat its outcome.
+    注册成功返回 True；失败返回 False——phonemizer 会再试
+    ``PHONEMIZER_ESPEAK_LIBRARY`` 或系统安装，两者仍可能可用。
+    幂等：只有第一次真正干活，之后重复同一结果。
     """
     global _bundled_registered
     if _bundled_registered is not None:
@@ -87,19 +71,15 @@ def ensure_espeak() -> bool:
         from phonemizer.backend.espeak.wrapper import EspeakWrapper
 
         library = espeakng_loader.get_library_path()
-        # get_data_path() raises when the directory is absent, so ask for it
-        # BEFORE touching the wrapper: a half-registration (library set, data
-        # path not) is the failure mode described in this module's docstring.
+        # get_data_path() 在目录不存在时会抛；必须在改 wrapper 之前先拿到它，
+        # 否则会出现「库设了、数据路径没设」的半注册，模块文档里写过那种挂法。
         data_path = espeakng_loader.get_data_path()
 
         EspeakWrapper.set_library(library)
         EspeakWrapper.set_data_path(data_path)
     except Exception as exc:
-        # Not fatal, and not silent either: without the bundled library the
-        # engines run on whatever espeak-ng the system provides, whose
-        # transcription may differ from the one the scoring was calibrated
-        # against - or on nothing at all, and then every word is dropped from
-        # the comparison.
+        # 不致命，但也不能静默：没有自带库时引擎用系统 espeak-ng，
+        # 转写可能和校准那套不同；两边都没有则每个词都会从对比里丢掉。
         log.warning(
             "Bundled espeak-ng could not be registered (%s: %s); falling back "
             "to PHONEMIZER_ESPEAK_LIBRARY or a system espeak-ng. Scores may "
@@ -109,41 +89,38 @@ def ensure_espeak() -> bool:
         _bundled_registered = False
         return False
 
-    # set_library() does not check the path (it is a plain assignment), so this
-    # line states what phonemizer will now try to load, not that loading
-    # succeeded. The real failure surfaces later, when the first backend is
-    # built.
+    # set_library() 不检查路径（只是赋值），所以这行日志说的是
+    # 「phonemizer 接下来会去加载什么」，不是「已经加载成功」。
+    # 真正失败发生在第一次建 backend 的时候。
     log.info("espeak-ng resolves from %s (data %s).", library, data_path)
     _bundled_registered = True
     return True
 
-def resolved_library() -> str | None:
-    """The espeak library phonemizer would use, or None if it finds none.
 
-    Answers through phonemizer's own lookup, so it reflects all three levels of
-    its precedence rule - the registration above, ``PHONEMIZER_ESPEAK_LIBRARY``
-    and the system search - rather than only the first. This is the question a
-    consumer of the engines actually has; the presence of an ``espeak-ng``
-    *executable* on PATH is a different one, and on Windows the two disagree
-    (the official installer writes ``libespeak-ng.dll``, which phonemizer's
-    system search does not look for).
+def resolved_library() -> str | None:
+    """phonemizer 实际会用的 espeak 库路径；找不到则 None。
+
+    走 phonemizer 自己的查找，所以能反映三级优先级：上面的注册、
+    ``PHONEMIZER_ESPEAK_LIBRARY``、系统搜索——而不只是第一级。
+    这才是引擎调用方真正要问的问题；PATH 上有没有 ``espeak-ng`` 可执行文件
+    是另一回事，Windows 上两者经常不一致（官方安装器写的是
+    ``libespeak-ng.dll``，phonemizer 的系统搜索并不找它）。
     """
     try:
         from phonemizer.backend.espeak.wrapper import EspeakWrapper
 
         return str(EspeakWrapper.library())
     except Exception:
-        # RuntimeError when nothing is found, ImportError when phonemizer is
-        # not installed at all. Both mean the same thing to the caller.
+        # 什么都找不到是 RuntimeError；没装 phonemizer 是 ImportError。
+        # 对调用方来说含义一样。
         return None
 
-def main() -> int:
-    """Report which espeak-ng this environment would use. Exit 0 if any.
 
-    The output is split on purpose, because install.py reads it: **stdout is
-    the resolved library path and nothing else** (empty when none was found),
-    while the explanation goes to stderr. That way the caller needs no parsing
-    rule, and a human running the command still sees the whole story.
+def main() -> int:
+    """报告当前环境会用哪份 espeak-ng。找到任意一份则退出码 0。
+
+    输出刻意拆开：install.py 会读——**stdout 只有解析到的库路径**
+    （没有则为空），说明文字走 stderr。调用方不用解析，人跑命令也能看全貌。
     """
     bundled = ensure_espeak()
     library = resolved_library()
@@ -161,5 +138,7 @@ def main() -> int:
     print(library)
     return 0
 
+
+# pragma: no cover 告诉覆盖率工具「别计这一行」——由 install.py 通过 -m 来跑。
 if __name__ == "__main__":  # pragma: no cover - exercised via install.py
     raise SystemExit(main())
