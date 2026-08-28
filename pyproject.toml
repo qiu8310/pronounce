@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pronounce"
+version = "0.1.0"
+description = "Standalone pronunciation scoring CLI (phoneme + acoustic engines)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "transformers>=5.3; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+    "transformers>=4.44,<5; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+    "torch>=2.0.0; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+    "torch==2.2.2; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+    "librosa>=0.10.0",
+    "scipy>=1.10.0",
+    "scikit-learn>=1.2.0",
+    "fastdtw>=0.3.4",
+    "phonemizer-fork>=3.3.0",
+    "espeakng-loader>=0.2.4,<0.3",
+    "python-Levenshtein>=0.21.0",
+    "soundfile>=0.12.0",
+    "panphon>=0.20.0",
+    "protobuf>=3.20.0",
+    "numpy>=1.24.0,<2.5; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+    "numpy>=1.24.0,<2; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pronounce*"]
+
+[tool.setuptools.package-data]
+"pronounce.phoneme" = ["en_model_calibration.json"]
