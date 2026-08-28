@@ -9,9 +9,9 @@ phoneme ASR of the user's audio, with no per-phrase reference recording required
 
 Like ``pronunciation/acoustic/`` it is GUI- and application-agnostic: every tunable lives in
 the small :class:`AnalyzerConfig` below. The library ships with working defaults
-and is fully autonomous -- importing and calling :func:`pronounce.phoneme.analyze`
+and is fully autonomous -- importing and calling :func:`pronounce.score.phoneme.analyze`
 works without any host. A host injects its own values **once at startup** with
-:func:`configure`, mirroring the ``logging.basicConfig`` / ``pronounce.acoustic.configure``
+:func:`configure`, mirroring the ``logging.basicConfig`` / ``pronounce.score.acoustic.configure``
 pattern; later analysis simply reads whatever is active here.
 
 Data-derived scoring constants (the GOOD anchor, recall threshold, axis weights,
@@ -26,7 +26,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -67,8 +66,7 @@ class AnalyzerConfig:
     # injects its own path because that file is machine-local STATE, unlike the
     # committed <lang>_model_calibration.json next to it, and an installed
     # package's own directory is no place to write state to.
-    calibration_file: Optional[Path] = None
-
+    calibration_file: Path | None = None
 
 # Active configuration for this process. The default keeps the library
 # autonomous; a host app replaces it once at startup via configure().
@@ -83,7 +81,6 @@ def configure(cfg: AnalyzerConfig) -> None:
     """
     global _active
     _active = cfg
-
 
 def get_config() -> AnalyzerConfig:
     """Return the currently active analyzer configuration."""

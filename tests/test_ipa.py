@@ -1,6 +1,6 @@
 import unittest
 
-from pronounce.ipa import ipa_for_text
+from pronounce.phonemes import ipa_for_text
 
 
 class TestIpaForText(unittest.TestCase):

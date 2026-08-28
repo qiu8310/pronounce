@@ -14,10 +14,10 @@ without it the built-in defaults keep the package fully autonomous.
 
 from .config import AnalyzerConfig, configure, get_config
 from .speech import (
+    PronunciationResult,
     analyze,
     load_models,
     warm_up,
-    PronunciationResult,
 )
 
 __all__ = [

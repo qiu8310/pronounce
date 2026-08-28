@@ -24,7 +24,7 @@ Stdout is one JSON object per invocation.
 | `word_diff` | object[] | `[]` when recognition matches the target | GUI-style expected/heard diffs |
 | `reference_words` | object[] | `[]` when none | Per target-phrase word tags |
 | `recognized_units` | object[] | `[]` when none | Heard units (phones or words) |
-| `prosody` | object | user-only when `--ref` omitted | `f0`, `energy`, `ref_f0`, `ref_energy` contours |
+| `prosody` | object | `ref_*` are `[]` without `--ref` | Pitch/energy contours for charts (see below). Not part of the score |
 | `phoneme` | object | `{}` when engine is acoustic | Phoneme-engine diagnostics |
 | `acoustic` | object | `{}` when engine is phoneme | Acoustic-engine diagnostics |
 
@@ -89,6 +89,49 @@ One `{"word", "correct"}` (and engine-specific extras as produced) per target-ph
 ### `recognized_units`
 
 Each `{"unit", "correct"}`. Units are **words** for acoustic and **phonemes** for phoneme.
+
+### `prosody`
+
+Pitch and loudness time series so a UI can draw intonation and energy. They do **not** feed `score` / `passed`. Scoring engines leave `prosody` empty; the CLI fills it from the same 16 kHz mono waveforms used for scoring, after leading/trailing silence trim (`top_db=30`).
+
+A successful `score` run always has these four keys. Lists are truncated in the examples; a real take is one sample per STFT hop (librosa default 512 samples at 16 kHz ≈ 32 ms).
+
+Phoneme without `--ref` (user contours only):
+
+```json
+{
+  "f0": [0.0, 118.4, 132.1, 125.0, 110.2],
+  "energy": [12.4, 88.0, 140.2, 95.1, 40.0],
+  "ref_f0": [],
+  "ref_energy": []
+}
+```
+
+With a reference wav (passed `--ref`, or acoustic auto-TTS when `--ref` is omitted):
+
+```json
+{
+  "f0": [120.1, 135.8, 128.0, 122.4],
+  "energy": [40.0, 180.2, 90.5, 55.0],
+  "ref_f0": [180.4, 175.2, 160.0, 155.8],
+  "ref_energy": [30.0, 200.1, 85.4, 48.2]
+}
+```
+
+| Key | Type | Unit | When empty |
+|-----|------|------|------------|
+| `f0` | number[] | Hz | never on success; may be all `0` if the take is unvoiced |
+| `energy` | number[] | display 0–250 | never on success |
+| `ref_f0` | number[] | Hz | `[]` when there is no reference wav (phoneme, no `--ref`) |
+| `ref_energy` | number[] | display 0–250 | `[]` when there is no reference wav (phoneme, no `--ref`) |
+
+Acoustic without `--ref` still fills `ref_f0` / `ref_energy`: Kokoro synthesizes a native-speed reference and sets `ref_generated` to `true`.
+
+How the series are built:
+
+- **`f0` / `ref_f0`** — `librosa.pyin` with `fmin=50`, `fmax=450`. Unvoiced frames are 0, then linearly interpolated across neighboring voiced frames so the line is continuous. A fully unvoiced clip stays all zeros.
+- **`energy` / `ref_energy`** — frame RMS, then `MinMaxScaler` to `[0, 250]` **per clip**. User and reference energy are not on a shared absolute scale; compare shape, not numeric values.
+- User vs reference lists are usually **different lengths** (each wav is trimmed on its own). Overlay by normalizing each series onto 0–1 time; do not zip by index. `f0` and `energy` of the *same* clip are usually similar length, not guaranteed equal.
 
 ### `weak_phonemes` (inside `phoneme`)
 
@@ -183,7 +226,12 @@ Empty `{}` when `engine` is `phoneme`. Otherwise:
     {"unit": "aɪ", "correct": true},
     {"unit": "t", "correct": false}
   ],
-  "prosody": {},
+  "prosody": {
+    "f0": [0.0, 118.4, 132.1, 125.0, 110.2],
+    "energy": [12.4, 88.0, 140.2, 95.1, 40.0],
+    "ref_f0": [],
+    "ref_energy": []
+  },
   "phoneme": {
     "bucket": 4,
     "user_percent": 85.0,
@@ -251,7 +299,12 @@ Empty `{}` when `engine` is `phoneme`. Otherwise:
     {"unit": "the", "correct": true},
     {"unit": "bandwith", "correct": false}
   ],
-  "prosody": {},
+  "prosody": {
+    "f0": [120.1, 135.8, 128.0, 122.4],
+    "energy": [40.0, 180.2, 90.5, 55.0],
+    "ref_f0": [180.4, 175.2, 160.0, 155.8],
+    "ref_energy": [30.0, 200.1, 85.4, 48.2]
+  },
   "phoneme": {},
   "acoustic": {
     "acoustic_distance": 12,

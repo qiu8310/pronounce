@@ -14,20 +14,17 @@ KOKORO_SAMPLE_RATE = 24_000
 DEFAULT_VOICE = "af_heart"
 _LANG = {"en-us": "a", "en-gb": "b", "a": "a", "b": "b"}
 
-
 def lang_code(lang: str) -> str:
     code = _LANG.get((lang or "en-us").lower())
     if code is None:
         raise ValueError(f"unknown lang {lang!r}; use en-us or en-gb")
     return code
 
-
 def _root() -> Path:
     root = kokoro_model()
     if not (root / "config.json").is_file() or not (root / "kokoro-v1_0.pth").is_file():
         raise FileNotFoundError(f"Kokoro snapshot missing or incomplete at {root}")
     return root
-
 
 def voice_path(voice: str) -> Path:
     root = _root()
@@ -38,7 +35,6 @@ def voice_path(voice: str) -> Path:
     if not pt.is_file():
         raise FileNotFoundError(f"Kokoro voice not found: {pt}")
     return pt
-
 
 def phonemize(text: str, lang: str = "en-us") -> str:
     """Grapheme-to-phoneme via misaki (spaCy pipeline + espeak fallback)."""
@@ -57,7 +53,6 @@ def phonemize(text: str, lang: str = "en-us") -> str:
     g2p = en.G2P(trf=False, british=british, fallback=fallback, unk="")
     phonemes, _tokens = g2p(text)
     return (phonemes or "").strip()
-
 
 def synthesize(text: str, voice: str = DEFAULT_VOICE, lang: str = "en-us",
                device: str = "cpu") -> np.ndarray:
@@ -88,7 +83,6 @@ def synthesize(text: str, voice: str = DEFAULT_VOICE, lang: str = "en-us",
     if not chunks:
         return np.zeros(0, dtype=np.float32)
     return np.concatenate(chunks)
-
 
 def listen_sample_rate(speed: float, native: int = KOKORO_SAMPLE_RATE) -> int:
     """Wav sample rate that plays *speed* times native tempo (mimora tape-slow)."""

@@ -14,15 +14,15 @@ Settings come from this package's own ``AnalyzerConfig``; a host injects values 
 at startup with ``configure()``, and the built-in defaults keep it autonomous.
 
 This package never touches the GUI; the result it returns is structurally identical
-to ``pronounce.acoustic.PronunciationResult`` so the UI stays engine-neutral.
+to ``pronounce.score.acoustic.PronunciationResult`` so the UI stays engine-neutral.
 """
 
 from .config import AnalyzerConfig, configure, get_config
 from .speech import (
+    PronunciationResult,
     analyze,
     load_models,
     warm_up,
-    PronunciationResult,
 )
 
 __all__ = [

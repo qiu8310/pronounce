@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from pronounce import prosody
+from pronounce.score import prosody
 
 
 class TestInterpolateF0(unittest.TestCase):

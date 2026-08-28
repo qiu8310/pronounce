@@ -126,7 +126,7 @@ class TestModelsHome(unittest.TestCase):
 
 class TestKokoroLang(unittest.TestCase):
     def test_lang_code_aliases(self):
-        from pronounce.kokoro import lang_code
+        from pronounce.tts import lang_code
 
         self.assertEqual(lang_code("en-us"), "a")
         self.assertEqual(lang_code("en-gb"), "b")
@@ -134,13 +134,13 @@ class TestKokoroLang(unittest.TestCase):
             lang_code("es")
 
     def test_phonemize_rejects_empty(self):
-        from pronounce.kokoro import phonemize
+        from pronounce.tts import phonemize
 
         with self.assertRaises(ValueError):
             phonemize("  ")
 
     def test_listen_sample_rate_slows_playback(self):
-        from pronounce.kokoro import KOKORO_SAMPLE_RATE, listen_sample_rate
+        from pronounce.tts import KOKORO_SAMPLE_RATE, listen_sample_rate
 
         self.assertEqual(listen_sample_rate(1.0), KOKORO_SAMPLE_RATE)
         self.assertEqual(listen_sample_rate(0.8), int(round(KOKORO_SAMPLE_RATE * 0.8)))

@@ -27,7 +27,6 @@ import logging
 # load_models() calls stay cheap.
 _handled = False
 
-
 def _torch_below_2_6() -> bool:
     """True when the installed torch predates the 2.6 that transformers demands
     for ``torch.load``. Any parse failure returns False (assume a modern torch)."""
@@ -38,7 +37,6 @@ def _torch_below_2_6() -> bool:
         return (major, minor) < (2, 6)
     except Exception:
         return False
-
 
 def allow_torch_load_for_trusted_models() -> None:
     """Neutralise transformers' torch>=2.6 requirement for ``torch.load``.
@@ -88,7 +86,6 @@ def allow_torch_load_for_trusted_models() -> None:
             _installed_torch_version(),
         )
     _handled = True
-
 
 def _installed_torch_version() -> str:
     try:

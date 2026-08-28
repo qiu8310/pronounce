@@ -8,7 +8,7 @@ OpenPronounce). It must not reach back into the host application, so every
 tunable setting lives in the small :class:`AnalyzerConfig` dataclass below.
 
 The library ships with working defaults and is fully autonomous: importing and
-calling :func:`pronounce.acoustic.analyze` works without any host. A host application
+calling :func:`pronounce.score.acoustic.analyze` works without any host. A host application
 injects its own values **once at startup** with :func:`configure`, mirroring the
 ``logging.basicConfig`` pattern -- later analysis simply reads whatever is
 active here.
@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -49,8 +48,7 @@ class AnalyzerConfig:
     # package, which is what standalone use and the eval tooling expect. A host
     # injects its own path because that file is machine-local STATE, and an
     # installed package's own directory is no place to write state to.
-    calibration_file: Optional[Path] = None
-
+    calibration_file: Path | None = None
 
 # Active configuration for this process. The default keeps the library
 # autonomous; a host app replaces it once at startup via configure().
@@ -73,7 +71,6 @@ def configure(cfg: AnalyzerConfig) -> None:
         from . import speech
         speech._phonemize_word.cache_clear()
     _active = cfg
-
 
 def get_config() -> AnalyzerConfig:
     """Return the currently active analyzer configuration."""

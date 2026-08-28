@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pronounce"
 version = "0.1.0"
-description = "Standalone pronunciation scoring, Kokoro TTS, and G2P CLI"
+description = "Standalone pronunciation CLI (score, tts, phonemes)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -33,4 +33,7 @@ where = ["."]
 include = ["pronounce*"]
 
 [tool.setuptools.package-data]
-"pronounce.phoneme" = ["en_model_calibration.json"]
+"pronounce.score.phoneme" = ["en_model_calibration.json"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

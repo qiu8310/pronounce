@@ -3,7 +3,7 @@
 
 """Shared, torch-free waveform helpers for the pronunciation stack.
 
-Both engines (``pronounce.acoustic`` / ``pronounce.phoneme``) and the
+Both engines (``pronounce.score.acoustic`` / ``pronounce.score.phoneme``) and the
 host's prosody layer (``mimora/prosody.py``) must prepare audio identically:
 the score and the prosody contours have to be measured on the same signal.
 Mirroring them per module keeps the layering intact (the engines must not
@@ -30,7 +30,6 @@ TARGET_SAMPLE_RATE = 16_000
 # signal - and therefore the scores and the contours - line up across modules.
 TRIM_TOP_DB = 30
 
-
 def prepare_waveform(waveform: np.ndarray, orig_sr: int) -> np.ndarray:
     """Return a 1-D float32 mono waveform resampled to TARGET_SAMPLE_RATE."""
     import librosa
@@ -47,7 +46,6 @@ def prepare_waveform(waveform: np.ndarray, orig_sr: int) -> np.ndarray:
         wav = librosa.resample(wav, orig_sr=orig_sr, target_sr=TARGET_SAMPLE_RATE)
 
     return np.ascontiguousarray(wav, dtype=np.float32)
-
 
 def trim_silence(wav: np.ndarray) -> np.ndarray:
     """Cut leading/trailing silence so pauses don't distort scores or contours.
@@ -66,7 +64,6 @@ def trim_silence(wav: np.ndarray) -> np.ndarray:
     if trimmed.size < int(0.1 * TARGET_SAMPLE_RATE):
         return wav
     return np.ascontiguousarray(trimmed, dtype=np.float32)
-
 
 def waveform_digest(waveform: np.ndarray) -> bytes:
     """Stable content digest of a waveform, for cache keys.

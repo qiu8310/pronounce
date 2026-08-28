@@ -1,6 +1,7 @@
 import unittest
+
 from pronounce.common import PronunciationResult
-from pronounce.json_out import to_payload
+from pronounce.score.json_out import to_payload
 
 _ENVELOPE_KEYS = (
     "ok",

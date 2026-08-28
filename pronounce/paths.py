@@ -16,14 +16,11 @@ def models_home() -> Path:
         "MODELS_HOME is not set; export it to the shared models directory"
     )
 
-
 def wav2vec2_model(name: str) -> Path:
     return models_home() / "llm" / "wav2vec2" / name
 
-
 def kokoro_model() -> Path:
     return models_home() / "llm" / "kokoro" / "Kokoro-82M"
-
 
 def spacy_dir() -> Path:
     return models_home() / "llm" / "spacy"

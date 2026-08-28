@@ -61,13 +61,12 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional
 
 # The outcome of the single registration attempt: None until it has been made,
 # then True/False for good, so repeat calls from the analysis path cost nothing
 # and answer consistently. Registration is idempotent, so a race between two
 # threads can at worst do the same assignment twice.
-_bundled_registered: Optional[bool] = None
+_bundled_registered: bool | None = None
 
 
 def ensure_espeak() -> bool:
@@ -118,8 +117,7 @@ def ensure_espeak() -> bool:
     _bundled_registered = True
     return True
 
-
-def resolved_library() -> Optional[str]:
+def resolved_library() -> str | None:
     """The espeak library phonemizer would use, or None if it finds none.
 
     Answers through phonemizer's own lookup, so it reflects all three levels of
@@ -138,7 +136,6 @@ def resolved_library() -> Optional[str]:
         # RuntimeError when nothing is found, ImportError when phonemizer is
         # not installed at all. Both mean the same thing to the caller.
         return None
-
 
 def main() -> int:
     """Report which espeak-ng this environment would use. Exit 0 if any.
@@ -163,7 +160,6 @@ def main() -> int:
     print(f"Resolves to      : {library}", file=sys.stderr)
     print(library)
     return 0
-
 
 if __name__ == "__main__":  # pragma: no cover - exercised via install.py
     raise SystemExit(main())

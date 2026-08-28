@@ -6,10 +6,10 @@ fills it so a UI can draw intonation. No torch.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
-import numpy as np
 import librosa
+import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 
 from pronounce.common.audio import (
@@ -28,8 +28,7 @@ __all__ = [
     "user_only_prosody",
 ]
 
-_reference_cache: Dict[str, Any] = {}
-
+_reference_cache: dict[str, Any] = {}
 
 def extract_f0(audio_waveform: np.ndarray, sr: int = TARGET_SAMPLE_RATE) -> np.ndarray:
     f0, _voiced_flag, _voiced_probs = librosa.pyin(
@@ -37,12 +36,10 @@ def extract_f0(audio_waveform: np.ndarray, sr: int = TARGET_SAMPLE_RATE) -> np.n
     )
     return np.nan_to_num(f0)
 
-
 def extract_energy(audio_waveform: np.ndarray) -> np.ndarray:
     energy = librosa.feature.rms(y=audio_waveform)
     scaler = MinMaxScaler(feature_range=(0, 250))
     return scaler.fit_transform(energy.T).flatten()
-
 
 def interpolate_f0(f0: np.ndarray) -> np.ndarray:
     f0 = np.array(f0)
@@ -51,8 +48,7 @@ def interpolate_f0(f0: np.ndarray) -> np.ndarray:
         return f0
     return np.interp(np.arange(len(f0)), np.where(mask)[0], f0[mask])
 
-
-def _reference_prosody(reference_audio: np.ndarray, reference_sr: int) -> Dict[str, np.ndarray]:
+def _reference_prosody(reference_audio: np.ndarray, reference_sr: int) -> dict[str, np.ndarray]:
     global _reference_cache
     arr = np.asarray(reference_audio)
     key = (reference_sr, arr.shape, waveform_digest(arr))
@@ -65,13 +61,12 @@ def _reference_prosody(reference_audio: np.ndarray, reference_sr: int) -> Dict[s
         }
     return _reference_cache
 
-
 def compute_prosody(
     user_audio: np.ndarray,
     user_sr: int,
     reference_audio: np.ndarray,
     reference_sr: int,
-) -> Dict[str, List[float]]:
+) -> dict[str, list[float]]:
     """Four contours: ``f0``, ``energy``, ``ref_f0``, ``ref_energy``."""
     user_wav = _trim_silence(_prepare_waveform(user_audio, user_sr))
     reference = _reference_prosody(reference_audio, reference_sr)
@@ -82,8 +77,7 @@ def compute_prosody(
         "ref_energy": reference["energy"].tolist(),
     }
 
-
-def user_only_prosody(user_audio: np.ndarray, user_sr: int) -> Dict[str, List[float]]:
+def user_only_prosody(user_audio: np.ndarray, user_sr: int) -> dict[str, list[float]]:
     """When there is no reference wav: user contours, empty ref lists."""
     user_wav = _trim_silence(_prepare_waveform(user_audio, user_sr))
     return {

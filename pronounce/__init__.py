@@ -1,1 +1,1 @@
-"""Standalone pronunciation scoring engines (phoneme + acoustic)."""
+"""Standalone pronunciation CLI: score, tts, phonemes."""

@@ -30,23 +30,18 @@ import json
 import logging
 import re
 import threading
-from functools import lru_cache
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+import Levenshtein
 import numpy as np
 import torch
-import Levenshtein
 from fastdtw import fastdtw
-from scipy.spatial.distance import cosine
-from transformers import Wav2Vec2Processor, Wav2Vec2Model, Wav2Vec2ForCTC
 from phonemizer import phonemize
-
-# Settings come from the library's own AnalyzerConfig (see acoustic/config.py),
-# never from the host application: a host injects its values once at startup via
-# acoustic.configure(). get_config() returns the active configuration.
-from .config import get_config
+from scipy.spatial.distance import cosine
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2Processor
 
 # Shared waveform preparation (single torch-free copy in pronounce.common).
 # The underscored aliases keep this module's established local names (and the
@@ -64,6 +59,10 @@ from pronounce.common.audio import (
 # neither of which is guaranteed. See that module.
 from pronounce.common.espeak import ensure_espeak
 
+# Settings come from the library's own AnalyzerConfig (see acoustic/config.py),
+# never from the host application: a host injects its values once at startup via
+# acoustic.configure(). get_config() returns the active configuration.
+from .config import get_config
 
 # =====================================================================
 # Configuration.
@@ -108,7 +107,6 @@ ACOUSTIC_MIN_SPAN = 0.05         # minimal floor-to-ceiling span (avoids degener
 # current_calibration_file(), which every read and write below goes through.
 CALIBRATION_FILE = Path(__file__).resolve().parent / "calibration.json"
 
-
 def current_calibration_file() -> Path:
     """The calibration file in effect: the host's, else the package default.
 
@@ -118,7 +116,6 @@ def current_calibration_file() -> Path:
     """
     return get_config().calibration_file or CALIBRATION_FILE
 
-
 def samples_file() -> Path:
     """Path of the per-attempt calibration sample log.
 
@@ -126,7 +123,6 @@ def samples_file() -> Path:
     to recompute the acoustic floor on request.
     """
     return Path(get_config().log_dir) / "acoustic_samples.jsonl"
-
 
 # The acoustic floor is per practising user: calibration.json maps a user name
 # (AnalyzerConfig.user_name, "" when unset) to that user's floor under a "users"
@@ -159,13 +155,11 @@ def _load_calibration() -> float:
         logging.exception("Failed to read calibration file; using defaults:")
     return default
 
-
 # Calibrated acoustic floor in effect, cached after first load so calibration.json
 # is read once. Loaded lazily (so configure() can install the user name first) and
 # refreshed automatically when the active user changes; None means "not loaded".
-_acoustic_good: Optional[float] = None
-_acoustic_good_user: Optional[str] = None
-
+_acoustic_good: float | None = None
+_acoustic_good_user: str | None = None
 
 def current_acoustic_floor() -> float:
     """Return the active user's calibrated acoustic floor (cached).
@@ -180,12 +174,10 @@ def current_acoustic_floor() -> float:
         _acoustic_good_user = user_name
     return _acoustic_good
 
-
 # Keys carried over when migrating a legacy flat calibration into a user profile.
 _LEGACY_CALIBRATION_KEYS = ("acoustic_good", "created", "samples_used", "voice")
 
-
-def save_calibration(acoustic_good: float, extra: Optional[Dict[str, Any]] = None) -> None:
+def save_calibration(acoustic_good: float, extra: dict[str, Any] | None = None) -> None:
     """Persist the current user's acoustic floor and apply it to this process.
 
     The floor is stored under the configured user name in the ``users`` map,
@@ -196,7 +188,7 @@ def save_calibration(acoustic_good: float, extra: Optional[Dict[str, Any]] = Non
     # Resolved once: this function reads the file and writes it back, and both
     # must be the same file even if the configuration were replaced between.
     path = current_calibration_file()
-    entry: Dict[str, Any] = {
+    entry: dict[str, Any] = {
         "acoustic_good": round(float(acoustic_good), 5),
         "created": datetime.now().isoformat(timespec="seconds"),
         "user_name": user_name,
@@ -205,7 +197,7 @@ def save_calibration(acoustic_good: float, extra: Optional[Dict[str, Any]] = Non
         entry.update(extra)
 
     # Merge into the existing store so other users keep their floors.
-    data: Dict[str, Any] = {}
+    data: dict[str, Any] = {}
     if path.exists():
         try:
             existing = json.loads(path.read_text(encoding="utf-8"))
@@ -232,21 +224,20 @@ def save_calibration(acoustic_good: float, extra: Optional[Dict[str, Any]] = Non
                  f"acoustic_good={acoustic_good:.4f} -> {path}")
 
 # Lazily-initialised model singletons (loaded once, reused for every analysis).
-_processor: Optional[Wav2Vec2Processor] = None
-_model: Optional[Wav2Vec2Model] = None          # embeddings; alias of _model_ctc.wav2vec2
-_model_ctc: Optional[Wav2Vec2ForCTC] = None     # transcription (what was recognised)
+_processor: Wav2Vec2Processor | None = None
+_model: Wav2Vec2Model | None = None          # embeddings; alias of _model_ctc.wav2vec2
+_model_ctc: Wav2Vec2ForCTC | None = None     # transcription (what was recognised)
 # Guards load_models() so concurrent callers cannot load the weights twice
 # (the public API does not require callers to serialize themselves).
 _load_lock = threading.Lock()
-
 
 # =====================================================================
 # Result type (the module's contract with the GUI layer)
 # =====================================================================
 # PronunciationResult is the engine-neutral shared type (pronounce.common):
-# both this acoustic engine and pronounce.phoneme return the same shape so the
+# both this acoustic engine and pronounce.score.phoneme return the same shape so the
 # GUI is engine-agnostic. Re-exported via this package's __init__, so
-# ``pronounce.acoustic.PronunciationResult`` keeps working. This engine fills
+# ``pronounce.score.acoustic.PronunciationResult`` keeps working. This engine fills
 # the ``acoustic_*`` fields; the phoneme-specific fields stay at their defaults.
 from pronounce.common import PronunciationResult
 
@@ -283,7 +274,6 @@ def load_models() -> None:
         # weights (~1.2 GB of RAM/VRAM and a second load from disk).
         _model = _model_ctc.wav2vec2
 
-
 def warm_up() -> None:
     """Run a short dummy pass through both models to remove first-call latency."""
     load_models()
@@ -291,17 +281,14 @@ def warm_up() -> None:
     extract_embeddings(dummy)
     transcribe(dummy)
 
-
 def _ensure_loaded() -> None:
     """Guarantee models are available before inference."""
     if _model is None or _model_ctc is None or _processor is None:
         load_models()
 
-
 # Audio preparation lives in pronounce.common.audio (_prepare_waveform /
 # _trim_silence are imported above), shared with the phoneme engine and the
 # host's prosody layer so all of them measure the same prepared signal.
-
 
 # =====================================================================
 # Wav2Vec2 inference
@@ -324,7 +311,6 @@ def extract_embeddings(audio_waveform: np.ndarray,
 
     return features.squeeze(0).cpu().numpy()
 
-
 def transcribe(audio_waveform: np.ndarray) -> str:
     """Transcribe audio to text using the Wav2Vec2 CTC head."""
     _ensure_loaded()
@@ -338,7 +324,6 @@ def transcribe(audio_waveform: np.ndarray) -> str:
 
     predicted_ids = torch.argmax(logits, dim=-1).cpu()  # decode on CPU
     return _processor.batch_decode(predicted_ids)[0]
-
 
 # =====================================================================
 # Phoneme / text comparison (reused OpenPronounce core)
@@ -376,18 +361,16 @@ def _phonemize_word(word: str) -> tuple:
                               f"will be excluded from scoring")
             return ()  # fallback if every backend fails
 
-
-def get_word_phonemes(text: str) -> List[tuple]:
+def get_word_phonemes(text: str) -> list[tuple]:
     """Return ordered (word, phonemes) pairs for each word in the text."""
     # Split on words, ignoring punctuation, to avoid issues like "times,".
     words = re.findall(r"\b[\w']+\b", text)
     return [(word, _phonemize_word(word)) for word in words]
 
-
 def get_phonemes_with_word_mapping(text: str):
     """Return a list of phonemes and a mapping {phoneme_index: source_word}."""
-    phonemes: List[str] = []
-    phoneme_to_word: Dict[int, str] = {}
+    phonemes: list[str] = []
+    phoneme_to_word: dict[int, str] = {}
 
     for word, word_phonemes in get_word_phonemes(text):
         for phoneme in word_phonemes:
@@ -396,8 +379,7 @@ def get_phonemes_with_word_mapping(text: str):
 
     return phonemes, phoneme_to_word
 
-
-def compare_transcriptions(transcription: str, text_reference: str) -> Dict[str, Any]:
+def compare_transcriptions(transcription: str, text_reference: str) -> dict[str, Any]:
     """Compare an ASR transcription against the expected text.
 
     Identifies per-word pronunciation errors via phoneme alignment and returns
@@ -431,7 +413,7 @@ def compare_transcriptions(transcription: str, text_reference: str) -> Dict[str,
     transcribed_join = " ".join(transcribed_phonemes)
     phoneme_distance = Levenshtein.distance(expected_join, transcribed_join)
 
-    errors: List[Dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
     words_with_errors = set()
 
     # Map each expected phoneme index to the set of transcribed indices it aligns to.
@@ -488,7 +470,7 @@ def compare_transcriptions(transcription: str, text_reference: str) -> Dict[str,
         sorted_trans_indices = sorted(matched_trans_indices)
 
         # Reconstruct the actual word(s), de-duplicating while preserving order.
-        actual_words: List[str] = []
+        actual_words: list[str] = []
         seen_words = set()
         for tidx in sorted_trans_indices:
             if tidx in transcribed_map:
@@ -538,8 +520,7 @@ def compare_transcriptions(transcription: str, text_reference: str) -> Dict[str,
         "words_with_errors": list(words_with_errors),
     }
 
-
-def word_level_diff(transcription: str, text_reference: str) -> List[Dict[str, str]]:
+def word_level_diff(transcription: str, text_reference: str) -> list[dict[str, str]]:
     """Align recognised words against the target phrase, returning only mismatches.
 
     Lets the GUI present concrete "expected -> heard" pairs instead of the raw
@@ -558,7 +539,7 @@ def word_level_diff(transcription: str, text_reference: str) -> List[Dict[str, s
     expected_words = clean_transcription(text_reference).split()
     heard_words = clean_transcription(transcription).split()
 
-    diffs: List[Dict[str, str]] = []
+    diffs: list[dict[str, str]] = []
     for tag, i1, i2, j1, j2 in Levenshtein.opcodes(expected_words, heard_words):
         if tag == "equal":
             continue
@@ -568,8 +549,7 @@ def word_level_diff(transcription: str, text_reference: str) -> List[Dict[str, s
         })
     return diffs
 
-
-def heard_word_tags(transcription: str, text_reference: str) -> List[Dict[str, Any]]:
+def heard_word_tags(transcription: str, text_reference: str) -> list[dict[str, Any]]:
     """Tag each recognised word by whether it matched the target phrase.
 
     Returns one entry per heard word, in spoken order::
@@ -590,9 +570,8 @@ def heard_word_tags(transcription: str, text_reference: str) -> List[Dict[str, A
                 tags[j]["correct"] = True
     return tags
 
-
 def reference_word_tags(text_reference: str,
-                        words_with_errors: List[str]) -> List[Dict[str, Any]]:
+                        words_with_errors: list[str]) -> list[dict[str, Any]]:
     """Tag each word of the target phrase as correctly pronounced or not.
 
     Returns one entry per phrase word, in order, preserving the original token
@@ -606,12 +585,11 @@ def reference_word_tags(text_reference: str,
     will build the same shape by mapping phone errors back to words.
     """
     error_words = {w.lower() for w in words_with_errors}
-    tags: List[Dict[str, Any]] = []
+    tags: list[dict[str, Any]] = []
     for token in text_reference.split():
         clean = token.lower().strip(".,!?;:\"")
         tags.append({"word": token, "correct": clean not in error_words})
     return tags
-
 
 def _random_pair_baseline(emb_a: np.ndarray, emb_b: np.ndarray,
                           n_pairs: int = 2000, seed: int = 0) -> float:
@@ -632,18 +610,16 @@ def _random_pair_baseline(emb_a: np.ndarray, emb_b: np.ndarray,
     den = np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1) + 1e-9
     return float(np.mean(1.0 - num / den))
 
-
-def acoustic_bad_for(baseline: float, acoustic_good: Optional[float] = None) -> float:
+def acoustic_bad_for(baseline: float, acoustic_good: float | None = None) -> float:
     """Per-utterance acoustic ceiling derived from the random-pair baseline."""
     good = current_acoustic_floor() if acoustic_good is None else acoustic_good
     return max(ACOUSTIC_BAD_FRACTION * baseline, good + ACOUSTIC_MIN_SPAN)
 
-
 def compute_pronunciation_score(acoustic_per_step: float,
                                 phoneme_error_rate: float,
                                 word_error_rate: float,
-                                acoustic_bad: Optional[float] = None,
-                                acoustic_good: Optional[float] = None) -> float:
+                                acoustic_bad: float | None = None,
+                                acoustic_good: float | None = None) -> float:
     """Combine the three normalized components into a 0-100 score.
 
     Args:
@@ -669,12 +645,10 @@ def compute_pronunciation_score(acoustic_per_step: float,
     final_score = min(100.0, max(0.0, final_score))
     return round(final_score, 2)
 
-
 # Prosody (pitch & energy contours) is not this engine's business: it belongs to
 # the engine-agnostic ``mimora/prosody.py``, computed by the host from the raw
 # user/reference waveforms so the same charts work for every engine.
 # ``analyze`` returns an empty ``prosody`` dict; the host fills it in.
-
 
 def clean_transcription(text: str) -> str:
     """Lower-case, strip punctuation and collapse whitespace in a transcription.
@@ -695,7 +669,6 @@ def clean_transcription(text: str) -> str:
     text = re.sub(r"[^a-zA-Z' ]+", "", text)
     return " ".join(text.split()).strip()
 
-
 # =====================================================================
 # Reference feature cache
 # =====================================================================
@@ -706,11 +679,10 @@ def clean_transcription(text: str) -> str:
 # mimora/prosody.py, which now owns the F0/energy contours.) The lock makes
 # concurrent analyze() calls safe; in the app they are already serialized by the
 # GUI's is_processing_audio guard, so it is uncontended.
-_reference_cache: Dict[str, Any] = {}
+_reference_cache: dict[str, Any] = {}
 _reference_cache_lock = threading.Lock()
 
-
-def _reference_features(reference_audio: np.ndarray, reference_sr: int) -> Dict[str, Any]:
+def _reference_features(reference_audio: np.ndarray, reference_sr: int) -> dict[str, Any]:
     """Return the prepared waveform and embeddings of the reference."""
     global _reference_cache
     arr = np.asarray(reference_audio)
@@ -725,7 +697,6 @@ def _reference_features(reference_audio: np.ndarray, reference_sr: int) -> Dict[
             }
         return _reference_cache
 
-
 # =====================================================================
 # Single entry point
 # =====================================================================
@@ -736,7 +707,6 @@ def _reference_features(reference_audio: np.ndarray, reference_sr: int) -> Dict[
 MAX_SAMPLES_KEPT = 2000
 
 _samples_trimmed = False  # once-per-process guard for _trim_sample_log()
-
 
 def _trim_sample_log() -> None:
     """Drop all but the newest MAX_SAMPLES_KEPT lines from the sample log.
@@ -754,8 +724,7 @@ def _trim_sample_log() -> None:
     logging.info("Sample log trimmed: %d -> %d lines (%s)",
                  len(lines), MAX_SAMPLES_KEPT, path.name)
 
-
-def _append_calibration_sample(record: Dict[str, Any]) -> None:
+def _append_calibration_sample(record: dict[str, Any]) -> None:
     """Append one analysis record to the calibration sample log (best effort).
 
     The file feeds ``acoustic/calibrate.py``; a write failure must never break
@@ -773,13 +742,12 @@ def _append_calibration_sample(record: Dict[str, Any]) -> None:
     except Exception:
         logging.exception("Failed to append calibration sample:")
 
-
 def analyze(user_audio: np.ndarray,
             expected_text: str,
-            reference_audio: Optional[np.ndarray] = None,
+            reference_audio: np.ndarray | None = None,
             user_sr: int = TARGET_SAMPLE_RATE,
             reference_sr: int = KOKORO_SAMPLE_RATE,
-            voice: Optional[str] = None,
+            voice: str | None = None,
             is_reference: bool = False) -> PronunciationResult:
     """Compare a user's spoken attempt against the expected phrase.
 

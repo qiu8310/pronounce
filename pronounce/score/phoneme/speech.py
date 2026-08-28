@@ -50,13 +50,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
-
-# Settings come from the library's own AnalyzerConfig (see config.py), never from
-# the host application: a host injects its values once at startup via configure().
-from .config import get_config
 
 # Engine-neutral result type shared with the acoustic engine, so the GUI reads one
 # stable shape regardless of the active engine. This engine fills the
@@ -77,6 +73,9 @@ from pronounce.common.audio import (
 # rather than relying on Kokoro/misaki's import side effect.
 from pronounce.common.espeak import ensure_espeak
 
+# Settings come from the library's own AnalyzerConfig (see config.py), never from
+# the host application: a host injects its values once at startup via configure().
+from .config import get_config
 
 # =====================================================================
 # Constants and config.
@@ -113,7 +112,6 @@ CALIBRATION_FILE = _DIR / "calibration.json"
 BAD_MIN_SPAN = 0.10                                 # keep bad strictly above good
 BAD_BASELINE_DEFAULT = 0.5                          # ceiling when a sequence is empty
 
-
 def _read_json(path: Path) -> dict:
     """Return a JSON object from *path*, or ``{}`` when absent/malformed."""
     try:
@@ -122,7 +120,6 @@ def _read_json(path: Path) -> dict:
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
-
 
 def current_calibration_file() -> Path:
     """The user-calibration file in effect: the host's, else the package default.
@@ -134,18 +131,15 @@ def current_calibration_file() -> Path:
     """
     return get_config().calibration_file or CALIBRATION_FILE
 
-
 def _lang_key(espeak_language: str) -> str:
     """Map an espeak dialect ("en-us"/"en-gb") to a calibration language key ("en")."""
     return (espeak_language or "").split("-")[0] or _DEFAULT_LANG
-
 
 def _model_calibration_path(lang: str) -> Path:
     """Path of the committed model calibration for *lang* (e.g. en_model_calibration.json)."""
     return _DIR / f"{lang}_model_calibration.json"
 
-
-def _load_model_calibration(lang: str) -> Tuple[dict, Path]:
+def _load_model_calibration(lang: str) -> tuple[dict, Path]:
     """Read the model calibration for *lang*, falling back to English when absent.
 
     Returns the constants together with the file they came from. The path is
@@ -164,8 +158,7 @@ def _load_model_calibration(lang: str) -> Tuple[dict, Path]:
         data = _read_json(path)
     return data, path
 
-
-def _user_phoneme_good(lang: str, user_name: str) -> Optional[float]:
+def _user_phoneme_good(lang: str, user_name: str) -> float | None:
     """The user's re-anchored ``phoneme_good`` for *lang*, or None when uncalibrated.
 
     User file shape: ``{lang: {"users": {user_name: {"phoneme_good": float, ...}}}}``.
@@ -180,7 +173,6 @@ def _user_phoneme_good(lang: str, user_name: str) -> Optional[float]:
         except (TypeError, ValueError):
             return None
     return None
-
 
 # Data-fit scoring constants, declared with their built-in defaults so the
 # module's attribute set is explicit (visible to readers, IDEs and static
@@ -202,10 +194,9 @@ WORD_GOOD_FRAC = 0.33
 WORD_BAD_FRAC = 0.66
 OVERPRODUCTION_TOLERANCE = 0.5
 OVERPRODUCTION_STRENGTH = 1.0
-BUCKET_CUTPOINTS: List[float] = []
-BUCKET_TO_PERCENT: Dict[str, Any] = {}
+BUCKET_CUTPOINTS: list[float] = []
+BUCKET_TO_PERCENT: dict[str, Any] = {}
 PASS_BUCKET = 4
-
 
 def _apply_model_calibration(calib: dict) -> None:
     """Bind a model-calibration dict to this module's scoring constants.
@@ -257,22 +248,20 @@ def _apply_model_calibration(calib: dict) -> None:
     # A take "passes" at or above this bucket (good speech is bucket 4-5).
     PASS_BUCKET = calib.get("pass_bucket", 4)
 
-
 # Import-time English defaults so the module is usable standalone (and the offline
 # unit tests have concrete values). _ensure_calibration() reloads per language and
 # applies the user override once a host injects its config via configure().
 _apply_model_calibration(_load_model_calibration(_DEFAULT_LANG)[0])
 # Language/user the constants above currently reflect; None forces the first
 # _ensure_calibration() to (re)load even when the language is the default.
-_loaded_lang: Optional[str] = None
-_loaded_user: Optional[str] = None
+_loaded_lang: str | None = None
+_loaded_user: str | None = None
 # Serializes the reload itself: a calibration (re)load rewrites many module
 # globals, and two concurrent first calls would interleave those writes. The
 # lock does NOT make analyze() reading the globals mid-reload safe - in the
 # app the GUI serializes analyze() calls; library users switching languages
 # concurrently with analysis still race (documented limitation).
 _calibration_lock = threading.Lock()
-
 
 def _ensure_calibration() -> None:
     """Load the model + user calibration for the configured language/user, if changed.
@@ -284,7 +273,6 @@ def _ensure_calibration() -> None:
     """
     with _calibration_lock:
         _ensure_calibration_locked()
-
 
 def _ensure_calibration_locked() -> None:
     global _loaded_lang, _loaded_user, PHONEME_GOOD
@@ -319,7 +307,6 @@ def _ensure_calibration_locked() -> None:
     )
     _loaded_lang, _loaded_user = lang, user
 
-
 # =====================================================================
 # Sample log + calibration write-back (mirrors the acoustic engine).
 # analyze() appends one record per take to logs/phoneme_samples.jsonl; the offline
@@ -331,14 +318,12 @@ def samples_file() -> Path:
     """Path of the phoneme sample log (under the host's configured log dir)."""
     return Path(get_config().log_dir) / "phoneme_samples.jsonl"
 
-
 # Cap on the sample log: once per run (before the first append) the log is cut down
 # to its newest MAX_SAMPLES_KEPT lines, so it cannot grow without bound. Comfortably
 # above calibrate.py's MAX_SAMPLES_USED (300), so trimming never starves calibration.
 MAX_SAMPLES_KEPT = 2000
 
 _samples_trimmed = False  # once-per-process guard for _trim_sample_log()
-
 
 def _trim_sample_log() -> None:
     """Drop all but the newest MAX_SAMPLES_KEPT lines from the sample log.
@@ -356,8 +341,7 @@ def _trim_sample_log() -> None:
     logging.info("[phoneme] sample log trimmed: %d -> %d lines (%s)",
                  len(lines), MAX_SAMPLES_KEPT, path.name)
 
-
-def _append_sample(record: Dict[str, Any]) -> None:
+def _append_sample(record: dict[str, Any]) -> None:
     """Append one analysis record to the sample log (best effort).
 
     A write failure must never break the analysis itself, so every error is logged
@@ -375,19 +359,16 @@ def _append_sample(record: Dict[str, Any]) -> None:
     except Exception:
         logging.exception("[phoneme] failed to append sample")
 
-
 def current_lang() -> str:
     """Calibration language key ("en", "es") for the configured espeak language."""
     return _lang_key(get_config().espeak_language)
-
 
 def current_phoneme_good() -> float:
     """The GOOD anchor in effect for the configured language/user."""
     _ensure_calibration()
     return PHONEME_GOOD
 
-
-def save_calibration(phoneme_good: float, extra: Optional[Dict[str, Any]] = None) -> None:
+def save_calibration(phoneme_good: float, extra: dict[str, Any] | None = None) -> None:
     """Write the current user's re-anchored ``phoneme_good`` into the user calibration.
 
     Used by phoneme/calibrate.py. Stored under ``{lang: {"users": {user_name:
@@ -414,7 +395,7 @@ def save_calibration(phoneme_good: float, extra: Optional[Dict[str, Any]] = None
     if not isinstance(users, dict):
         users = {}
 
-    entry: Dict[str, Any] = {
+    entry: dict[str, Any] = {
         "phoneme_good": round(float(phoneme_good), 6),
         "user_name": user,
         "recalibrated_at": datetime.now().isoformat(timespec="seconds"),
@@ -436,14 +417,12 @@ def save_calibration(phoneme_good: float, extra: Optional[Dict[str, Any]] = None
     logging.info("[phoneme] wrote phoneme_good=%.6f (lang=%s user=%r) -> %s",
                  phoneme_good, lang, user, path)
 
-
 # =====================================================================
 # Model lifecycle.
 # =====================================================================
 _processor = None
 _model = None
 _load_lock = threading.Lock()
-
 
 def _ensure_phonemizer_detected() -> None:
     """Make transformers see phonemizer-fork as satisfying its "phonemizer" backend.
@@ -476,7 +455,6 @@ def _ensure_phonemizer_detected() -> None:
     if hasattr(_iu, "_phonemizer_available"):
         _iu._phonemizer_available = True
 
-
 def load_models() -> None:
     """Load the wav2vec2 phoneme weights into memory once. Safe to call repeatedly.
 
@@ -501,7 +479,6 @@ def load_models() -> None:
         _processor = AutoProcessor.from_pretrained(cfg.model_name)
         _model = AutoModelForCTC.from_pretrained(cfg.model_name).to(cfg.device).eval()
 
-
 def warm_up() -> None:
     """Run dummy passes to remove first-call latency (recognizer + panphon + espeak)."""
     load_models()
@@ -518,22 +495,18 @@ def warm_up() -> None:
     except Exception:
         logging.exception("[phoneme] scoring warm-up failed")
 
-
 def _ensure_loaded() -> None:
     """Guarantee the recognizer is available before inference."""
     if _model is None or _processor is None:
         load_models()
 
-
 # espeak registration lives in pronounce.common.espeak (ensure_espeak is
 # imported above), shared with the acoustic engine so a fix to it reaches both.
 # Do not take a private copy here: that leaves the other engine unregistered.
 
-
 # Audio preparation lives in pronounce.common.audio (_prepare_waveform is
 # imported above), shared with the acoustic engine and the host's prosody layer
 # so all of them measure the same prepared signal.
-
 
 # =====================================================================
 # Step 2 -- spoken phonemes from audio via the wav2vec2 phoneme recognizer.
@@ -551,8 +524,7 @@ def _recognize_argmax(wav16: np.ndarray, device: str) -> str:
     predicted_ids = logits.argmax(dim=-1)
     return _processor.batch_decode(predicted_ids)[0]
 
-
-def _aggregate_conf(frame_confs: List[float]) -> float:
+def _aggregate_conf(frame_confs: list[float]) -> float:
     """Pool a CTC token's per-frame posteriors into one confidence ("max"/"mean")."""
     if not frame_confs:
         return 0.0
@@ -560,9 +532,8 @@ def _aggregate_conf(frame_confs: List[float]) -> float:
         return sum(frame_confs) / len(frame_confs)
     return max(frame_confs)
 
-
 def _ctc_phone_runs(wav16: np.ndarray, device: str
-                    ) -> Tuple[List[Tuple[str, float, int, int]], int]:
+                    ) -> tuple[list[tuple[str, float, int, int]], int]:
     """Greedy CTC collapse -> (runs, n_frames).
 
     Each run is ``(token, conf, start_frame, end_frame_inclusive)``.
@@ -582,7 +553,7 @@ def _ctc_phone_runs(wav16: np.ndarray, device: str
     blank_id = tokenizer.pad_token_id                 # CTC blank == pad for wav2vec2
     delimiter = getattr(tokenizer, "word_delimiter_token", None)
 
-    runs: List[Tuple[str, float, int, int]] = []
+    runs: list[tuple[str, float, int, int]] = []
     n = len(frame_ids)
     i = 0
     while i < n:
@@ -597,14 +568,12 @@ def _ctc_phone_runs(wav16: np.ndarray, device: str
         i = j + 1
     return runs, n
 
-
-def _recognize_with_conf(wav16: np.ndarray, device: str) -> List[Tuple[str, float]]:
+def _recognize_with_conf(wav16: np.ndarray, device: str) -> list[tuple[str, float]]:
     """Greedy CTC decode that also returns each phone's posterior confidence."""
     runs, _n = _ctc_phone_runs(wav16, device)
     return [(tok, conf) for tok, conf, _i, _j in runs]
 
-
-def _spoken_timed_from_wav(wav16: np.ndarray, device: str) -> List[Dict[str, Any]]:
+def _spoken_timed_from_wav(wav16: np.ndarray, device: str) -> list[dict[str, Any]]:
     """Recognized phones with approximate start/end seconds on ``wav16``.
 
     Phone sequence matches scoring (same confidence gate + inventory fold).
@@ -623,21 +592,18 @@ def _spoken_timed_from_wav(wav16: np.ndarray, device: str) -> List[Dict[str, Any
     ]
     return _normalize_phone_spans(raw_spans)
 
-
-def _spoken_from_wav(wav16: np.ndarray, device: str) -> List[str]:
+def _spoken_from_wav(wav16: np.ndarray, device: str) -> list[str]:
     """Recognize the phonemes the speaker produced, normalized and folded."""
     return [span["phone"] for span in _spoken_timed_from_wav(wav16, device)]
-
 
 # =====================================================================
 # Step 1 -- reference phonemes from text (espeak-ng via phonemizer).
 # =====================================================================
-def reference_phonemes(text: str, espeak_lang: str) -> List[str]:
+def reference_phonemes(text: str, espeak_lang: str) -> list[str]:
     """Phonemize ``text`` into a flat list of IPA phoneme symbols (per-phone separated)."""
     return [p for word in reference_word_phonemes(text, espeak_lang) for p in word]
 
-
-def reference_word_phonemes(text: str, espeak_lang: str) -> List[List[str]]:
+def reference_word_phonemes(text: str, espeak_lang: str) -> list[list[str]]:
     """Phonemize ``text`` into one phone group **per whitespace token**, in order.
 
     Returns exactly one group per ``text.split()`` token (an empty list for a token
@@ -676,17 +642,15 @@ def reference_word_phonemes(text: str, espeak_lang: str) -> List[List[str]]:
         ipa_list = [ipa_list]
     return [_normalize_phones(_tokenize_ipa(ipa)) for ipa in ipa_list]
 
-
 # =====================================================================
 # Phone tokenization, diacritic stripping and inventory fold.
 # =====================================================================
-def _tokenize_ipa(ipa: str) -> List[str]:
+def _tokenize_ipa(ipa: str) -> list[str]:
     """Split an IPA string into phone symbols (whitespace-separated, else per char)."""
     ipa = ipa.strip()
     if " " in ipa or "\n" in ipa:
         return [tok for tok in ipa.split() if tok]
     return [ch for ch in ipa if not ch.isspace()]
-
 
 # Suprasegmental diacritics one side marks and the other does not (espeak vs the
 # w2v2 recognizer). Written as code points so no bare combining marks appear here.
@@ -708,24 +672,21 @@ _PHONE_FOLD = {
     "oʊ": "o", "əʊ": "o",            # GA / RP "goat" diphthong -> o
 }
 
-
-def _normalize_phones(tokens: List[str]) -> List[str]:
+def _normalize_phones(tokens: list[str]) -> list[str]:
     """Drop suprasegmental diacritics and fold the inventory so both sides align."""
     cleaned = (tok.translate(_STRIP_DIACRITICS) for tok in tokens)
     folded = (_PHONE_FOLD.get(tok, tok) for tok in cleaned)
     return [tok for tok in folded if tok]
 
-
-def _normalize_phone_spans(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _normalize_phone_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Same inventory fold as ``_normalize_phones``, keeping t0/t1 in lockstep."""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for span in spans:
         tok = str(span.get("phone", "")).translate(_STRIP_DIACRITICS)
         tok = _PHONE_FOLD.get(tok, tok)
         if tok:
             out.append({"phone": tok, "t0": float(span["t0"]), "t1": float(span["t1"])})
     return out
-
 
 # =====================================================================
 # Articulatory feature distance (panphon). Imported lazily and cached so the
@@ -758,13 +719,11 @@ def _feature_table():
         finally:
             pathlib.Path.open = original_open
 
-
 @lru_cache(maxsize=4096)
 def _phone_vector(phone: str):
     """Numeric articulatory feature vector for one phone, or None if unknown."""
     vectors = _feature_table().word_to_vector_list(phone, numeric=True)
     return tuple(vectors[0]) if vectors else None
-
 
 @lru_cache(maxsize=8192)
 def _substitution_cost(a: str, b: str) -> float:
@@ -777,15 +736,13 @@ def _substitution_cost(a: str, b: str) -> float:
     differing = sum(1 for x, y in zip(va, vb) if x != y)
     return differing / len(va)
 
-
 # =====================================================================
 # Step 3 -- feature-weighted edit-distance alignment and scoring.
 # =====================================================================
 _OP_SUB, _OP_DEL, _OP_INS = "sub", "del", "ins"
 
-
-def _edit_alignment(reference: List[str],
-                    spoken: List[str]) -> Tuple[List[Tuple[str, str]], float]:
+def _edit_alignment(reference: list[str],
+                    spoken: list[str]) -> tuple[list[tuple[str, str]], float]:
     """Feature-weighted edit-distance alignment over phone tokens.
 
     Returns the aligned ``(reference, spoken)`` pairs ("" marks an inserted or
@@ -795,7 +752,7 @@ def _edit_alignment(reference: List[str],
     """
     n, m = len(reference), len(spoken)
     cost = [[0.0] * (m + 1) for _ in range(n + 1)]
-    back: List[List[Optional[str]]] = [[None] * (m + 1) for _ in range(n + 1)]
+    back: list[list[str | None]] = [[None] * (m + 1) for _ in range(n + 1)]
     for i in range(1, n + 1):
         cost[i][0] = float(i)
         back[i][0] = _OP_DEL
@@ -811,7 +768,7 @@ def _edit_alignment(reference: List[str],
             cost[i][j] = best
             back[i][j] = _OP_SUB if best == substitute else (_OP_DEL if best == delete else _OP_INS)
 
-    pairs: List[Tuple[str, str]] = []
+    pairs: list[tuple[str, str]] = []
     i, j = n, m
     while i > 0 or j > 0:
         op = back[i][j]
@@ -827,8 +784,7 @@ def _edit_alignment(reference: List[str],
     pairs.reverse()
     return pairs, cost[n][m]
 
-
-def _capped_per_phone_distance(pairs: List[Tuple[str, str]],
+def _capped_per_phone_distance(pairs: list[tuple[str, str]],
                                distance: float, n_reference: int) -> float:
     """Per-phone distance with the insertion contribution capped per reference phone.
 
@@ -844,15 +800,13 @@ def _capped_per_phone_distance(pairs: List[Tuple[str, str]],
     capped = (distance - insertion_cost) + min(insertion_cost, cap)
     return capped / n_reference
 
-
-def _bad_baseline(reference: List[str], spoken: List[str]) -> float:
+def _bad_baseline(reference: list[str], spoken: list[str]) -> float:
     """Per-utterance "completely wrong" anchor: mean feature distance over all pairs."""
     if not reference or not spoken:
         return BAD_BASELINE_DEFAULT
     total = sum(_substitution_cost(r, s) for r in reference for s in spoken)
     observed = total / (len(reference) * len(spoken))
     return _widen_bad_for_length(observed, len(reference))
-
 
 def _widen_bad_for_length(observed_bad: float, n_reference: int) -> float:
     """Raise a short phrase's ``bad`` anchor toward a conservative ceiling.
@@ -867,16 +821,14 @@ def _widen_bad_for_length(observed_bad: float, n_reference: int) -> float:
     trust = n_reference / (n_reference + BAD_SHRINK_PHONES)
     return trust * observed_bad + (1.0 - trust) * max(observed_bad, BAD_CEILING)
 
-
 def _score_from_distance(per_phone_distance: float, bad: float, good: float) -> float:
     """Map a per-phone distance onto 0-100 against the [good, bad] window."""
     span = max(bad - good, BAD_MIN_SPAN)
     accuracy = 1.0 - (per_phone_distance - good) / span
     return round(max(0.0, min(1.0, accuracy)) * 100.0, 1)
 
-
-def _weak_phonemes(pairs: List[Tuple[str, str]],
-                   max_count: int = 3) -> List[Dict[str, Any]]:
+def _weak_phonemes(pairs: list[tuple[str, str]],
+                   max_count: int = 3) -> list[dict[str, Any]]:
     """The reference phones pronounced worst, for the GUI's "work on these" line.
 
     For every reference phone in the alignment (substitution or deletion) measure
@@ -890,7 +842,7 @@ def _weak_phonemes(pairs: List[Tuple[str, str]],
     Insertions (``ref_sym == ""``) have no reference phone to blame and are
     ignored. Returns an empty list for a clean read.
     """
-    totals: Dict[str, Dict[str, Any]] = {}
+    totals: dict[str, dict[str, Any]] = {}
     for ref_sym, hyp_sym in pairs:
         if not ref_sym:                       # insertion: nothing to attribute
             continue
@@ -906,8 +858,7 @@ def _weak_phonemes(pairs: List[Tuple[str, str]],
         for sym, v in ranked[:max_count]
     ]
 
-
-def _phoneme_recall(pairs: List[Tuple[str, str]]) -> float:
+def _phoneme_recall(pairs: list[tuple[str, str]]) -> float:
     """Fraction of reference phones actually produced, read off the alignment."""
     recalled = 0
     total = 0
@@ -919,22 +870,20 @@ def _phoneme_recall(pairs: List[Tuple[str, str]]) -> float:
             recalled += 1
     return recalled / total if total else 0.0
 
-
 @dataclass
 class ScoreResult:
     """Two-axis score plus the alignment and the raw per-phone distances."""
 
     score: float
-    pairs: List[Tuple[str, str]]
+    pairs: list[tuple[str, str]]
     per_phone_distance: float
     bad_baseline: float
     phoneme_score: float
     recall: float
     good: float
 
-
-def align_and_score(reference: List[str], spoken: List[str],
-                    good: Optional[float] = None) -> ScoreResult:
+def align_and_score(reference: list[str], spoken: list[str],
+                    good: float | None = None) -> ScoreResult:
     """Align ``spoken`` against ``reference`` and score on two axes (quality + recall).
 
     ``good`` overrides the GOOD anchor of the phoneme axis: ``None`` uses the global
@@ -965,7 +914,6 @@ def align_and_score(reference: List[str], spoken: List[str],
         good=good_anchor,
     )
 
-
 # =====================================================================
 # Reference recognition cache (ceiling-mode GOOD anchor + retry reuse).
 # The same reference take is scored on every retry of a phrase; recognizing it once
@@ -975,12 +923,11 @@ def align_and_score(reference: List[str], spoken: List[str],
 # serialized by the GUI's is_processing_audio guard, but the package is also
 # documented as an autonomous library, where concurrent calls are legal.
 # =====================================================================
-_ref_cache: Dict[Tuple[bytes, Tuple[int, ...], int], List[str]] = {}
+_ref_cache: dict[tuple[bytes, tuple[int, ...], int], list[str]] = {}
 _ref_cache_lock = threading.Lock()
 
-
 def _recognize_reference(reference_audio: np.ndarray, reference_sr: int,
-                         device: str) -> List[str]:
+                         device: str) -> list[str]:
     """Recognized phonemes of the reference take, cached by content + sample rate."""
     arr = np.asarray(reference_audio, dtype=np.float32)
     key = (waveform_digest(arr), arr.shape, reference_sr)
@@ -997,13 +944,12 @@ def _recognize_reference(reference_audio: np.ndarray, reference_sr: int,
         _ref_cache[key] = spoken
     return spoken
 
-
 # =====================================================================
 # Phone-error -> word mapping (for the GUI's word-level highlight).
 # =====================================================================
-def _word_recall(groups: List[List[str]],
-                 pairs: List[Tuple[str, str]]
-                 ) -> Tuple[List[int], List[List[str]], List[float]]:
+def _word_recall(groups: list[list[str]],
+                 pairs: list[tuple[str, str]]
+                 ) -> tuple[list[int], list[list[str]], list[float]]:
     """Per reference word: recalled-phone count, heard phones, and mean distance.
 
     ``groups`` is the per-word phone grouping; ``pairs`` is the alignment over the
@@ -1017,13 +963,13 @@ def _word_recall(groups: List[List[str]],
     swapped word is far from the reference and reads as such, unlike the lenient
     50%-recall flag it replaces.
     """
-    word_of: List[int] = []
+    word_of: list[int] = []
     for wi, group in enumerate(groups):
         word_of.extend([wi] * len(group))
     n_ref = len(word_of)
 
     recalled = [0] * len(groups)
-    heard: List[List[str]] = [[] for _ in groups]
+    heard: list[list[str]] = [[] for _ in groups]
     dist_sum = [0.0] * len(groups)            # summed phone distance per word
     ref_idx = 0
     for ref_sym, hyp_sym in pairs:
@@ -1047,7 +993,6 @@ def _word_recall(groups: List[List[str]],
     ]
     return recalled, heard, word_dist
 
-
 def _word_level(word_avg: float, good: float, bad: float) -> str:
     """Classify a word's mean phone distance as "good" / "ok" / "bad".
 
@@ -1065,23 +1010,20 @@ def _word_level(word_avg: float, good: float, bad: float) -> str:
         return "bad"
     return "ok"
 
-
 # Minimum user-clip duration (seconds) for IPA "[我的]" playback. Shorter
 # windows are treated as untrusted alignment, not a playable word.
 IPA_CLIP_MIN_SEC = 0.05
 
-
-def ipa_clip_trusted(start_sec: Optional[float], end_sec: Optional[float]) -> bool:
+def ipa_clip_trusted(start_sec: float | None, end_sec: float | None) -> bool:
     """True when a word's timed span is long enough to play back."""
     if start_sec is None or end_sec is None:
         return False
     return (float(end_sec) - float(start_sec)) >= IPA_CLIP_MIN_SEC
 
-
-def build_ipa_words(tokens: List[str],
-                    groups: List[List[str]],
-                    pairs: List[Tuple[str, str]],
-                    spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_ipa_words(tokens: list[str],
+                    groups: list[list[str]],
+                    pairs: list[tuple[str, str]],
+                    spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Per-word IPA alignment + optional user-audio time spans for the UI panel.
 
     Insertions stay inside the current word (last reference phone's word, or
@@ -1092,14 +1034,14 @@ def build_ipa_words(tokens: List[str],
     if n_words == 0:
         return []
 
-    word_of: List[int] = []
+    word_of: list[int] = []
     for wi, group in enumerate(groups):
         word_of.extend([wi] * len(group))
 
-    expected: List[List[str]] = [[] for _ in range(n_words)]
-    heard: List[List[str]] = [[] for _ in range(n_words)]
-    ok: List[List[bool]] = [[] for _ in range(n_words)]
-    times: List[List[Tuple[float, float]]] = [[] for _ in range(n_words)]
+    expected: list[list[str]] = [[] for _ in range(n_words)]
+    heard: list[list[str]] = [[] for _ in range(n_words)]
+    ok: list[list[bool]] = [[] for _ in range(n_words)]
+    times: list[list[tuple[float, float]]] = [[] for _ in range(n_words)]
 
     ref_idx = 0
     spoken_idx = 0
@@ -1132,10 +1074,10 @@ def build_ipa_words(tokens: List[str],
             ok[wi].append(False)
         ref_idx += 1
 
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for wi in range(n_words):
-        start_sec: Optional[float] = None
-        end_sec: Optional[float] = None
+        start_sec: float | None = None
+        end_sec: float | None = None
         if times[wi]:
             start_sec = min(t0 for t0, _t1 in times[wi])
             end_sec = max(t1 for _t0, t1 in times[wi])
@@ -1150,7 +1092,6 @@ def build_ipa_words(tokens: List[str],
             "end_sec": end_sec,
         })
     return out
-
 
 def _overproduction_penalty(n_reference: int, n_spoken: int) -> float:
     """Penalty in [0, 1] for producing many more phones than the reference asked.
@@ -1169,7 +1110,6 @@ def _overproduction_penalty(n_reference: int, n_spoken: int) -> float:
         return 0.0
     return min(1.0, OVERPRODUCTION_STRENGTH * excess)
 
-
 def _penalised_word_distance(word_avg: float, penalty: float, bad: float) -> float:
     """Interpolate a word's mean distance toward the ``bad`` anchor by ``penalty``.
 
@@ -1180,19 +1120,17 @@ def _penalised_word_distance(word_avg: float, penalty: float, bad: float) -> flo
     """
     return word_avg + penalty * max(0.0, bad - word_avg)
 
-
-def _reference_word_tags(tokens: List[str], levels: List[str]) -> List[Dict[str, Any]]:
+def _reference_word_tags(tokens: list[str], levels: list[str]) -> list[dict[str, Any]]:
     """One {"word", "level", "correct"} per target token (case/punctuation kept).
 
     ``level`` drives the GUI's three-level colour (good/ok/bad); ``correct`` is kept
     for any consumer still reading the boolean (a word is "correct" unless it is bad).
     """
-    tags: List[Dict[str, Any]] = []
+    tags: list[dict[str, Any]] = []
     for i, token in enumerate(tokens):
         level = levels[i] if i < len(levels) else "good"
         tags.append({"word": token, "level": level, "correct": level != "bad"})
     return tags
-
 
 # =====================================================================
 # 0-5 bucketization: raw 0-100 score -> human-calibrated grade + percent.
@@ -1207,7 +1145,6 @@ def _score_to_bucket(score: float) -> int:
         return -1
     return int(sum(1 for c in BUCKET_CUTPOINTS if score >= c))
 
-
 def _bucket_to_percent(bucket: int, fallback: float) -> float:
     """User-facing percent for a bucket: the midpoint of its [lo, hi] band.
 
@@ -1220,7 +1157,6 @@ def _bucket_to_percent(bucket: int, fallback: float) -> float:
         return fallback
     lo, hi = band
     return round((float(lo) + float(hi)) / 2.0, 1)
-
 
 def _grade_for_score(bucket: int, score: float) -> tuple:
     """0-5 grade with a +/- shade: ("4+", 4.33) for ``score`` inside ``bucket``.
@@ -1241,16 +1177,15 @@ def _grade_for_score(bucket: int, score: float) -> tuple:
     label = f"{bucket}{('-', '', '+')[third]}"
     return label, round(bucket + (third - 1) / 3.0, 2)
 
-
 # =====================================================================
 # Entry point.
 # =====================================================================
 def analyze(user_audio: np.ndarray,
             expected_text: str,
-            reference_audio: Optional[np.ndarray] = None,
+            reference_audio: np.ndarray | None = None,
             user_sr: int = TARGET_SAMPLE_RATE,
             reference_sr: int = KOKORO_SAMPLE_RATE,
-            voice: Optional[str] = None,
+            voice: str | None = None,
             is_reference: bool = False) -> PronunciationResult:
     """Compare a user's spoken attempt against the expected phrase, phoneme-level.
 
@@ -1429,9 +1364,8 @@ def analyze(user_audio: np.ndarray,
         good_anchor=result.good,
     )
 
-
-def _ceiling_good(reference: List[str], reference_audio: Optional[np.ndarray],
-                  reference_sr: int, cfg) -> Optional[float]:
+def _ceiling_good(reference: list[str], reference_audio: np.ndarray | None,
+                  reference_sr: int, cfg) -> float | None:
     """Per-phrase GOOD anchor from the reference take, or None for global mode.
 
     Returns the reference's per-phone distance (ceiling mode) when a reference take
@@ -1448,8 +1382,7 @@ def _ceiling_good(reference: List[str], reference_audio: Optional[np.ndarray],
         return None
     return align_and_score(reference, ceiling_spoken).per_phone_distance
 
-
-def _build_feedback(score: float, passed: bool, words_with_errors: List[str]) -> str:
+def _build_feedback(score: float, passed: bool, words_with_errors: list[str]) -> str:
     """Short human-readable summary mirroring the acoustic engine's style."""
     lines = [f"Score: {score:.0f}/100 " + ("(passed)" if passed else "(try again)")]
     if words_with_errors:
