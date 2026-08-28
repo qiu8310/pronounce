@@ -1,46 +1,55 @@
 # Pronounce CLI
 
-Standalone pronunciation scoring for English takes. Two engines (phoneme and acoustic) print one JSON object to **stdout** per invocation; logs and progress go to stderr. See `FIELDS.md` for the full field contract.
+Standalone English pronunciation tools. Scoring engines (phoneme / acoustic) and Kokoro TTS / G2P each print one JSON object to **stdout**; logs go to stderr. Score fields: `FIELDS.md`.
 
 ## Install
 
-Shared interpreter with Mimora: `$MODELS_HOME/.venv` (Python 3.12). `mimora/.venv` and `pronounce/.venv` are symlinks to that directory. Install the CLI into it without pulling a second torch:
+Shared interpreter with mimora: `$MODELS_HOME/.venv` (Python 3.12). `mimora/.venv` and `pronounce/.venv` are symlinks to that directory. Install the CLI into it without pulling a second torch:
 
 ```bash
 "$MODELS_HOME/.venv/bin/pip" install -e "$MODELS_HOME/pronounce" --no-deps
 ```
+
+`tts` / `phonemes` need `kokoro` (already in the shared venv).
 
 ## Usage
 
 ```bash
 "$MODELS_HOME/.venv/bin/python" -m pronounce score phoneme --text "..." --user take.wav [--ref ref.wav] [--lang en-us] [--device cpu]
 "$MODELS_HOME/.venv/bin/python" -m pronounce score acoustic --text "..." --user take.wav --ref actor.wav [--device cpu]
+"$MODELS_HOME/.venv/bin/python" -m pronounce tts --text "Hello." --out /tmp/hello.wav [--voice af_heart] [--lang en-us] [--device cpu]
+"$MODELS_HOME/.venv/bin/python" -m pronounce phonemes --text "Hello, how are you?" [--lang en-us]
 "$MODELS_HOME/.venv/bin/python" -m pronounce schema
 ```
 
 | Flag | Meaning |
 |------|---------|
-| `--text` | Expected English phrase (required) |
-| `--user` | User take wav path (required) |
-| `--ref` | Reference wav. Optional for phoneme; required for acoustic |
-| `--lang` | espeak dialect, default `en-us` (phoneme only) |
+| `--text` | English phrase (required for score / tts / phonemes) |
+| `--user` | User take wav (score) |
+| `--ref` | Reference wav. Optional for phoneme score; required for acoustic |
+| `--out` | Output wav path (`tts`) |
+| `--voice` | Kokoro voice id, default `af_heart` (`tts`) |
+| `--lang` | `en-us` / `en-gb` (score phoneme, tts, phonemes) |
 | `--device` | `cpu` or `cuda`, default `cpu` |
 
 ## Model paths
 
-Both engines load local Hugging Face snapshots under `$MODELS_HOME` (no download at score time). If the variable is unset, the CLI infers the directory that contains `llm/`.
+Loads local snapshots under `$MODELS_HOME` (no download at run time). If unset, the CLI infers the directory that contains `llm/`.
 
-| Engine | Path |
-|--------|------|
-| phoneme | `$MODELS_HOME/llm/wav2vec2/wav2vec2-xlsr-53-espeak-cv-ft` |
-| acoustic | `$MODELS_HOME/llm/wav2vec2/wav2vec2-large-960h` |
+| 能力 | 路径 |
+|------|------|
+| score phoneme | `$MODELS_HOME/llm/wav2vec2/wav2vec2-xlsr-53-espeak-cv-ft` |
+| score acoustic | `$MODELS_HOME/llm/wav2vec2/wav2vec2-large-960h` |
+| tts | `$MODELS_HOME/llm/kokoro/Kokoro-82M` |
+| phonemes / tts G2P | `$MODELS_HOME/llm/spacy`（`en_core_web_sm`） |
 
-Each directory must be a valid `from_pretrained` root (`config.json` + weights).
+Wav2Vec2 directories must be valid `from_pretrained` roots. Kokoro needs `config.json`、`kokoro-v1_0.pth` 和 `voices/*.pt`。
 
 ## espeak-ng
 
-Phoneme scoring needs espeak for reference transcription. The `espeakng-loader` wheel ships the espeak-ng shared library and its data; `pronounce.common.espeak` registers them with phonemizer before the first phonemization. A system-installed espeak-ng remains a valid fallback when the wheel is absent.
+Phoneme scoring and Kokoro G2P fallback need espeak. `espeakng-loader` ships the library; `pronounce.common.espeak` registers it. A system espeak-ng remains a valid fallback.
 
 ## Output
 
-Success: one JSON object on stdout, exit 0. Failure: `{"ok": false, "engine": "...", "error": "..."}` on stdout, exit 1. Run `"$MODELS_HOME/.venv/bin/python" -m pronounce schema` to print the full `FIELDS.md` contract.
+Success: one JSON object on stdout, exit 0. Failure: `{"ok": false, ... "error": "..."}` on stdout, exit 1. `tts` also writes a 24 kHz wav to `--out`. `schema` prints `FIELDS.md`.
+

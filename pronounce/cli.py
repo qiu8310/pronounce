@@ -32,12 +32,68 @@ def _load_wav(path: str):
     return data, int(sr)
 
 
+def _fail_plain(error: str) -> int:
+    print(json.dumps({"ok": False, "error": error}))
+    return 1
+
+
 def _cmd_schema(_args: argparse.Namespace) -> int:
     text = _FIELDS_MD.read_text(encoding="utf-8")
     sys.stdout.write(text)
     if not text.endswith("\n"):
         sys.stdout.write("\n")
     return 0
+
+
+def _cmd_tts(args: argparse.Namespace) -> int:
+    out = Path(args.out).expanduser().resolve()
+    try:
+        from pronounce.kokoro import KOKORO_SAMPLE_RATE, synthesize
+
+        audio = synthesize(
+            args.text, voice=args.voice, lang=args.lang, device=args.device
+        )
+        import soundfile as sf
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(out), audio, KOKORO_SAMPLE_RATE)
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "command": "tts",
+                    "text": args.text,
+                    "voice": args.voice,
+                    "lang": args.lang,
+                    "out": str(out),
+                    "sample_rate": KOKORO_SAMPLE_RATE,
+                }
+            )
+        )
+        return 0
+    except Exception as e:
+        return _fail_plain(str(e))
+
+
+def _cmd_phonemes(args: argparse.Namespace) -> int:
+    try:
+        from pronounce.kokoro import phonemize
+
+        phonemes = phonemize(args.text, lang=args.lang)
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "command": "phonemes",
+                    "text": args.text,
+                    "lang": args.lang,
+                    "phonemes": phonemes,
+                }
+            )
+        )
+        return 0
+    except Exception as e:
+        return _fail_plain(str(e))
 
 
 def _cmd_score(args: argparse.Namespace) -> int:
@@ -154,6 +210,19 @@ def main(argv: list[str] | None = None) -> int:
 
     schema = sub.add_parser("schema", help="print FIELDS.md")
     schema.set_defaults(func=_cmd_schema)
+
+    tts = sub.add_parser("tts", help="synthesize English speech with Kokoro")
+    tts.add_argument("--text", required=True)
+    tts.add_argument("--out", required=True)
+    tts.add_argument("--voice", default="af_heart")
+    tts.add_argument("--lang", default="en-us")
+    tts.add_argument("--device", default="cpu")
+    tts.set_defaults(func=_cmd_tts)
+
+    phonemes = sub.add_parser("phonemes", help="grapheme-to-phoneme via Kokoro/misaki")
+    phonemes.add_argument("--text", required=True)
+    phonemes.add_argument("--lang", default="en-us")
+    phonemes.set_defaults(func=_cmd_phonemes)
 
     try:
         args = parser.parse_args(argv)

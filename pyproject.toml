@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pronounce"
 version = "0.1.0"
-description = "Standalone pronunciation scoring CLI (phoneme + acoustic engines)"
+description = "Standalone pronunciation scoring, Kokoro TTS, and G2P CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -23,6 +23,7 @@ dependencies = [
     "soundfile>=0.12.0",
     "panphon>=0.20.0",
     "protobuf>=3.20.0",
+    "kokoro>=0.9.0",
     "numpy>=1.24.0,<2.5; platform_system != 'Darwin' or platform_machine != 'x86_64'",
     "numpy>=1.24.0,<2; platform_system == 'Darwin' and platform_machine == 'x86_64'",
 ]

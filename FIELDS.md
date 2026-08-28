@@ -1,7 +1,9 @@
 # Pronounce CLI JSON fields
 
-Stdout is one JSON object per invocation. Success uses the envelope below.
-Failure uses `{"ok": false, "engine": "...", "error": "..."}` (see Failure).
+Stdout is one JSON object per invocation.
+
+- `score`: envelope below. Failure: `{"ok": false, "engine": "...", "error": "..."}`.
+- `tts` / `phonemes`: see [TTS and G2P](#tts-and-g2p). Failure: `{"ok": false, "error": "..."}`.
 
 ## Always present (success)
 
@@ -258,3 +260,29 @@ Empty `{}` when `engine` is `phoneme`. Otherwise:
   }
 }
 ```
+
+## TTS and G2P
+
+These commands do not use the score envelope. Success still prints one JSON object.
+
+### `tts`
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `ok` | bool | `true` |
+| `command` | `"tts"` | Which subcommand ran |
+| `text` | string | `--text` |
+| `voice` | string | `--voice` (default `af_heart`) |
+| `lang` | string | `--lang` (`en-us` / `en-gb`) |
+| `out` | string | Absolute `--out` path (24 kHz wav written here) |
+| `sample_rate` | number | Always `24000` |
+
+### `phonemes`
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `ok` | bool | `true` |
+| `command` | `"phonemes"` | Which subcommand ran |
+| `text` | string | `--text` |
+| `lang` | string | `--lang` |
+| `phonemes` | string | misaki American/British encoding (not espeak IPA) |
