@@ -12,7 +12,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pronounce.cli import main
-from pronounce.paths import kokoro_model, models_home, spacy_dir, wav2vec2_model
+from pronounce.paths import (
+    kokoro_model,
+    melo_bert,
+    melo_chinese,
+    models_home,
+    spacy_dir,
+    wav2vec2_model,
+)
 
 
 class TestCliGuards(unittest.TestCase):
@@ -52,6 +59,7 @@ class TestCliGuards(unittest.TestCase):
         out = buf.getvalue()
         self.assertIn("engine", out)
         self.assertIn("ipa", out.lower())
+        self.assertIn("tts-zh", out)
 
     def test_tts_requires_out(self):
         import contextlib
@@ -62,6 +70,28 @@ class TestCliGuards(unittest.TestCase):
         data = json.loads(buf.getvalue())
         self.assertFalse(data["ok"])
         self.assertIn("out", data["error"].lower())
+
+    def test_tts_zh_requires_out(self):
+        """中文 TTS 是独立子命令 tts-zh，缺 --out 时同样 JSON 退出 1。"""
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["tts-zh", "--text", "你好"])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        self.assertIn("out", data["error"].lower())
+
+    def test_tts_zh_is_not_tts_lang(self):
+        """原来的 tts 不接受 zh；中文走 tts-zh，不是 --lang zh。"""
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["tts", "--text", "你好", "--out", "/tmp/x.wav", "--lang", "zh"])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        self.assertNotEqual(data.get("command"), "tts-zh")
 
     def test_phonemes_requires_text(self):
         import contextlib
@@ -136,6 +166,14 @@ class TestModelsHome(unittest.TestCase):
                     spacy_dir(),
                     Path(tmp).resolve() / "llm" / "spacy",
                 )
+                self.assertEqual(
+                    melo_chinese(),
+                    Path(tmp).resolve() / "llm" / "melo" / "MeloTTS-Chinese",
+                )
+                self.assertEqual(
+                    melo_bert(),
+                    Path(tmp).resolve() / "llm" / "melo" / "chinese-roberta-wwm-ext-large",
+                )
 
 
 class TestKokoroLang(unittest.TestCase):
@@ -161,6 +199,33 @@ class TestKokoroLang(unittest.TestCase):
         self.assertEqual(listen_sample_rate(0.8), int(round(KOKORO_SAMPLE_RATE * 0.8)))
         with self.assertRaises(ValueError):
             listen_sample_rate(0.0)
+
+
+class TestMeloZh(unittest.TestCase):
+    def test_tts_zh_rejects_invalid_speed(self):
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["tts-zh", "--text", "你好", "--out", "/tmp/x.wav", "--speed", "0"])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        self.assertIn("speed", data["error"].lower())
+
+    def test_synthesize_rejects_empty(self):
+        from pronounce.tts_zh.melo import synthesize
+
+        with self.assertRaises(ValueError):
+            synthesize("  ")
+
+    def test_missing_checkpoint_mentions_path(self):
+        from pronounce.tts_zh.melo import synthesize
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"MODELS_HOME": tmp}):
+                with self.assertRaises(FileNotFoundError) as ctx:
+                    synthesize("你好")
+                self.assertIn("melo", str(ctx.exception).lower())
 
 
 if __name__ == "__main__":

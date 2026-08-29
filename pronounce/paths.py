@@ -40,3 +40,13 @@ def kokoro_model() -> Path:
 def spacy_dir() -> Path:
     """解压好的 spaCy 管道目录（Kokoro G2P 用的 en_core_web_sm）。"""
     return models_home() / "llm" / "spacy"
+
+
+def melo_chinese() -> Path:
+    """MeloTTS 中文 checkpoint 目录（config.json + checkpoint.pth）。"""
+    return models_home() / "llm" / "melo" / "MeloTTS-Chinese"
+
+
+def melo_bert() -> Path:
+    """MeloTTS 中文 BERT 特征目录（hfl/chinese-roberta-wwm-ext-large）。"""
+    return models_home() / "llm" / "melo" / "chinese-roberta-wwm-ext-large"

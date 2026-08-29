@@ -1,4 +1,4 @@
-"""pronounce 命令行入口：解析子命令并分发给 score / schema / tts / phonemes。
+"""pronounce 命令行入口：解析子命令并分发给 score / schema / tts / tts-zh / phonemes。
 
 成功时子命令自己往 stdout 打一份 JSON；失败也打 JSON（``ok: false``），
 退出码 1。不用 argparse 默认的 usage 文本 + exit 2，方便被 mimora 等宿主解析。
@@ -57,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     from pronounce.schema import add_parser as add_schema
     from pronounce.score import add_parser as add_score
     from pronounce.tts import add_parser as add_tts
+    from pronounce.tts_zh import add_parser as add_tts_zh
 
     argv = list(sys.argv[1:] if argv is None else argv)
     parser = _JsonArgumentParser(prog="pronounce")
@@ -66,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     add_score(sub)
     add_schema(sub)
     add_tts(sub)
+    add_tts_zh(sub)
     add_phonemes(sub)
 
     try:

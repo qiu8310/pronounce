@@ -31,6 +31,15 @@ DEMO="$MODELS_HOME/pronounce/demo"
 "$PY" -m pronounce tts --text "Hello" --out /tmp/hello-slow.wav --voice af_heart --lang en-us --speed 0.8
 ```
 
+## 中文合成（MeloTTS，`tts-zh`）
+
+和英语 `tts` 分开的子命令，不是 `--lang zh`。
+
+```bash
+"$PY" -m pronounce tts-zh --text "你好，今天天气怎么样？" --out /tmp/nihao.wav
+"$PY" -m pronounce tts-zh --text "你好" --out /tmp/nihao-slow.wav --speed 0.8
+```
+
 ## 音素打分
 
 `--ref` 可省略。下面用美音当用户跟读、英音当参考。

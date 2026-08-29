@@ -10,7 +10,7 @@ Shared interpreter with mimora: `$MODELS_HOME/.venv` (Python 3.12). `mimora/.ven
 "$MODELS_HOME/.venv/bin/pip" install -e "$MODELS_HOME/pronounce" --no-deps
 ```
 
-`tts` needs `kokoro` (already in the shared venv). `phonemes` needs espeak (`espeakng-loader`).
+`tts` needs `kokoro` (already in the shared venv). `tts-zh` needs `melotts` plus Chinese G2P extras (`pypinyin`, `jieba`, `cn2an`); install those into the shared venv without pulling a second torch (`pip install ... --no-deps` for MeloTTS itself). `phonemes` needs espeak (`espeakng-loader`).
 
 ## Usage
 
@@ -18,6 +18,7 @@ Shared interpreter with mimora: `$MODELS_HOME/.venv` (Python 3.12). `mimora/.ven
 "$MODELS_HOME/.venv/bin/python" -m pronounce score phoneme --text "..." --user take.wav [--ref ref.wav] [--lang en-us] [--device cpu] [--calibration cal.json]
 "$MODELS_HOME/.venv/bin/python" -m pronounce score acoustic --text "..." --user take.wav [--ref actor.wav] [--voice af_heart] [--device cpu]
 "$MODELS_HOME/.venv/bin/python" -m pronounce tts --text "Hello." --out /tmp/hello.wav [--voice af_heart] [--lang en-us] [--speed 0.8]
+"$MODELS_HOME/.venv/bin/python" -m pronounce tts-zh --text "你好。" --out /tmp/nihao.wav [--device cpu] [--speed 0.8]
 "$MODELS_HOME/.venv/bin/python" -m pronounce phonemes --text "Hello, how are you?" [--lang en-us]
 "$MODELS_HOME/.venv/bin/python" -m pronounce schema
 ```
@@ -26,13 +27,13 @@ Copy-paste examples with the sample wavs in [`demo/`](demo/README.md).
 
 | Flag | Meaning |
 |------|---------|
-| `--text` | English word, sentence, or paragraph |
+| `--text` | Target phrase (`tts` English; `tts-zh` Chinese; score/phonemes English) |
 | `--user` | User take wav (score) |
 | `--ref` | Reference wav. Optional for phoneme. Optional for acoustic: if omitted, Kokoro synthesizes one (`ref_generated`) |
-| `--out` | Output wav path (`tts`) |
+| `--out` | Output wav path (`tts` / `tts-zh`) |
 | `--voice` | Kokoro voice id, default `af_heart` (`tts`; acoustic auto-ref) |
-| `--speed` | Listen tempo for `tts`, default `1`. `0.8` is slower |
-| `--lang` | `en-us` / `en-gb` |
+| `--speed` | Listen tempo for `tts` / `tts-zh`, default `1`. `0.8` is slower |
+| `--lang` | `en-us` / `en-gb` (`tts` and score; Chinese TTS is `tts-zh`, not `--lang zh`) |
 | `--device` | `cpu` or `cuda`, default `cpu` |
 | `--calibration` | Per-user `calibration.json` (score) |
 | `--user-name` | Name stored with that calibration (score) |
@@ -48,6 +49,7 @@ Loads local snapshots under `$MODELS_HOME` (no download at run time). If unset, 
 | score phoneme | `$MODELS_HOME/llm/wav2vec2/wav2vec2-xlsr-53-espeak-cv-ft` |
 | score acoustic | `$MODELS_HOME/llm/wav2vec2/wav2vec2-large-960h` |
 | tts (and acoustic auto-ref) | `$MODELS_HOME/llm/kokoro/Kokoro-82M` |
+| tts-zh | `$MODELS_HOME/llm/melo/MeloTTS-Chinese` + `chinese-roberta-wwm-ext-large` |
 | tts G2P (internal) | `$MODELS_HOME/llm/spacy`（`en_core_web_sm`） |
 | phonemes (dictionary IPA) | espeak-ng via `espeakng-loader` |
 
@@ -59,4 +61,4 @@ Phoneme scoring, dictionary IPA, and Kokoro's unknown-word fallback need espeak.
 
 ## Output
 
-Success: one JSON object on stdout, exit 0. Failure: `{"ok": false, ... "error": "..."}` on stdout, exit 1. `tts` writes a wav to `--out` (24 kHz at `--speed 1`). Score includes `prosody` contours when audio is present. `schema` prints `FIELDS.md`.
+Success: one JSON object on stdout, exit 0. Failure: `{"ok": false, ... "error": "..."}` on stdout, exit 1. `tts` writes a wav to `--out` (24 kHz at `--speed 1`). `tts-zh` writes 44.1 kHz. Score includes `prosody` contours when audio is present. `schema` prints `FIELDS.md`.

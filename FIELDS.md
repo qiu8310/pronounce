@@ -336,6 +336,24 @@ Acoustic score without `--ref` synthesizes a native-speed Kokoro wav, sets `ref_
 
 `--speed` does not change the mouth timing of the model; it writes a lower sample rate so a normal player plays the file slower (same trick mimora uses for slow listen). Scoring reference audio is always synthesized at `speed=1`.
 
+### `tts-zh`
+
+Chinese TTS via MeloTTS. Separate subcommand from English `tts` (not `--lang zh`).
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `ok` | bool | `true` |
+| `command` | `"tts-zh"` | Which subcommand ran |
+| `text` | string | `--text` |
+| `speaker` | `"ZH"` | Only speaker in MeloTTS-Chinese |
+| `lang` | `"zh"` | Always Chinese |
+| `out` | string | Absolute `--out` path |
+| `speed` | number | Playback tempo (`1` = native; `0.8` = slower) |
+| `sample_rate` | number | Wav header rate (`native_rate * speed`) |
+| `native_rate` | number | Always `44100` |
+
+`--speed` is the same tape-slow as English `tts`. Synthesis itself is always native rate.
+
 ### `phonemes`
 
 Dictionary IPA for people to read (espeak-ng, stress kept). One `words[]` row per whitespace token, so a paragraph stays aligned with the page.

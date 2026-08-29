@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pronounce"
 version = "0.1.0"
-description = "Standalone pronunciation CLI (score, tts, phonemes)"
+description = "Standalone pronunciation CLI (score, tts, tts-zh, phonemes)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
