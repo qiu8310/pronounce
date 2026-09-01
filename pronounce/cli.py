@@ -69,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     add_tts(sub)
     add_tts_zh(sub)
     add_phonemes(sub)
+    add_serve(sub)
 
     try:
         args = parser.parse_args(argv)
@@ -80,6 +81,25 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload))
         return 1
     return args.func(args)
+
+
+def add_serve(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser("serve", help="HTTP worker for Oral (phoneme + Kokoro)")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8787)
+    p.add_argument("--no-load", action="store_true", help="skip model warmup (tests)")
+    p.set_defaults(func=run_serve)
+
+
+def run_serve(args: argparse.Namespace) -> int:
+    from pronounce.serve.app import serve
+
+    try:
+        serve(host=args.host, port=args.port, load=not args.no_load)
+    except ValueError as e:
+        print(json.dumps({"ok": False, "command": "serve", "error": str(e)}))
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
