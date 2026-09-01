@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from pronounce.paths import wav2vec2_model
@@ -7,18 +8,22 @@ from pronounce.phonemes.ipa import ipa_for_text
 from pronounce.tts import DEFAULT_VOICE, KOKORO_SAMPLE_RATE, synthesize
 from pronounce.tts.kokoro import load_tts
 
+# Phoneme AnalyzerConfig is process-global; serialize configure+analyze under ThreadingHTTPServer.
+_score_lock = threading.Lock()
+
 
 def warmup(device: str = "cpu") -> None:
     from pronounce.score.phoneme import AnalyzerConfig, configure, load_models
 
-    configure(
-        AnalyzerConfig(
-            model_name=str(wav2vec2_model("wav2vec2-xlsr-53-espeak-cv-ft")),
-            device=device,
-            espeak_language="en-us",
+    with _score_lock:
+        configure(
+            AnalyzerConfig(
+                model_name=str(wav2vec2_model("wav2vec2-xlsr-53-espeak-cv-ft")),
+                device=device,
+                espeak_language="en-us",
+            )
         )
-    )
-    load_models()
+        load_models()
     load_tts(device)
 
 
@@ -67,27 +72,28 @@ def score_phoneme(*, text: str, user_wav: str, ref_wav: str, lang: str = "en-us"
     user_audio = prepare_waveform(user_audio, int(user_sr))
     ref_audio = prepare_waveform(ref_audio, int(ref_sr))
 
-    configure(
-        AnalyzerConfig(
-            model_name=str(wav2vec2_model("wav2vec2-xlsr-53-espeak-cv-ft")),
-            device=device,
-            espeak_language=lang,
+    with _score_lock:
+        configure(
+            AnalyzerConfig(
+                model_name=str(wav2vec2_model("wav2vec2-xlsr-53-espeak-cv-ft")),
+                device=device,
+                espeak_language=lang,
+            )
         )
-    )
-    load_models()
-    result = analyze(
-        user_audio,
-        text,
-        reference_audio=ref_audio,
-        user_sr=TARGET_SAMPLE_RATE,
-        reference_sr=TARGET_SAMPLE_RATE,
-    )
-    contours = compute_prosody(user_audio, TARGET_SAMPLE_RATE, ref_audio, TARGET_SAMPLE_RATE)
-    return to_payload(
-        engine="phoneme",
-        result=result,
-        text=text,
-        user_wav=str(user_path),
-        ref_wav=str(ref_path),
-        prosody=contours,
-    )
+        load_models()
+        result = analyze(
+            user_audio,
+            text,
+            reference_audio=ref_audio,
+            user_sr=TARGET_SAMPLE_RATE,
+            reference_sr=TARGET_SAMPLE_RATE,
+        )
+        contours = compute_prosody(user_audio, TARGET_SAMPLE_RATE, ref_audio, TARGET_SAMPLE_RATE)
+        return to_payload(
+            engine="phoneme",
+            result=result,
+            text=text,
+            user_wav=str(user_path),
+            ref_wav=str(ref_path),
+            prosody=contours,
+        )
