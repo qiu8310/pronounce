@@ -21,9 +21,12 @@ Shared interpreter with mimora: `$MODELS_HOME/.venv` (Python 3.12). `mimora/.ven
 "$MODELS_HOME/.venv/bin/python" -m pronounce tts-zh --text "你好。" --out /tmp/nihao.wav [--device cpu] [--speed 0.8]
 "$MODELS_HOME/.venv/bin/python" -m pronounce phonemes --text "Hello, how are you?" [--lang en-us]
 "$MODELS_HOME/.venv/bin/python" -m pronounce schema
+"$MODELS_HOME/.venv/bin/python" -m pronounce serve --port 8787
 ```
 
 Copy-paste examples with the sample wavs in [`demo/`](demo/README.md).
+
+Resident HTTP (loopback only): `serve` keeps phoneme + Kokoro warm and exposes `GET /health`, `POST /tts`, `POST /phonemes`, `POST /score` with the same JSON bodies as the CLI. Use `--no-load` to skip warmup (tests / dry start).
 
 | Flag | Meaning |
 |------|---------|

@@ -5,6 +5,10 @@ Stdout is one JSON object per invocation.
 - `score`: envelope below. Failure: `{"ok": false, "engine": "...", "error": "..."}`.
 - `tts` / `phonemes`: see [TTS and IPA](#tts-and-ipa). Failure: `{"ok": false, "error": "..."}`.
 
+## HTTP serve
+
+`pronounce serve` exposes `POST /tts`, `POST /phonemes`, and `POST /score` on loopback. Success and failure bodies match the CLI JSON objects for those commands (same fields as below); `GET /health` returns `{"ok": true, "engine": "phoneme", "tts": "kokoro"}`.
+
 ## Always present (success)
 
 | Field | Type | When empty | Meaning |

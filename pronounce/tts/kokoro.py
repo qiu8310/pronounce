@@ -15,6 +15,26 @@ DEFAULT_VOICE = "af_heart"
 # Kokoro 内部口音码：美音 a、英音 b。也接受已经是 a/b 的值。
 _LANG = {"en-us": "a", "en-gb": "b", "a": "a", "b": "b"}
 
+_kmodel = None
+_pipelines: dict[str, object] = {}
+
+
+def load_tts(device: str = "cpu"):
+    """Load Kokoro once per process. Safe to call repeatedly."""
+    global _kmodel
+    from kokoro import KModel
+
+    if _kmodel is None:
+        activate_spacy()
+        ensure_espeak()
+        root = _root()
+        _kmodel = KModel(
+            repo_id="hexgrad/Kokoro-82M",
+            config=str(root / "config.json"),
+            model=str(root / "kokoro-v1_0.pth"),
+        ).to(device).eval()
+    return _kmodel
+
 
 def lang_code(lang: str) -> str:
     """把 ``en-us`` / ``en-gb`` 收成 Kokoro 的 ``a`` / ``b``。"""
@@ -68,27 +88,24 @@ def synthesize(text: str, voice: str = DEFAULT_VOICE, lang: str = "en-us",
     """合成 *text*；单声道 float32，24 kHz。
 
     Kokoro 按句切块生成，这里把各块 ``np.concatenate`` 接成一条波形。
+    ``KModel`` 经 ``load_tts`` 进程内只建一次；``KPipeline`` 按口音码缓存。
     """
     text = (text or "").strip()
     if not text:
         raise ValueError("empty text")
-    activate_spacy()
-    ensure_espeak()
-    from kokoro import KModel, KPipeline
+    from kokoro import KPipeline
 
-    root = _root()
+    model = load_tts(device)
     pt = voice_path(voice)
-    # .to(device) 把权重放到 cpu/cuda；.eval() 关掉 dropout 等训练行为。
-    model = KModel(
-        repo_id="hexgrad/Kokoro-82M",
-        config=str(root / "config.json"),
-        model=str(root / "kokoro-v1_0.pth"),
-    ).to(device).eval()
-    pipeline = KPipeline(
-        lang_code=lang_code(lang),
-        repo_id="hexgrad/Kokoro-82M",
-        model=model,
-    )
+    code = lang_code(lang)
+    pipeline = _pipelines.get(code)
+    if pipeline is None:
+        pipeline = KPipeline(
+            lang_code=code,
+            repo_id="hexgrad/Kokoro-82M",
+            model=model,
+        )
+        _pipelines[code] = pipeline
     chunks = []
     for _, _, audio in pipeline(text, voice=str(pt), model=model):
         if audio is not None and len(audio) > 0:

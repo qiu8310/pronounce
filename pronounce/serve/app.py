@@ -50,21 +50,94 @@ class RepeatHandler(BaseHTTPRequestHandler):
         if data is None:
             self._send(*_json_error("invalid json"))
             return
-        if path == "/score":
-            if not data.get("ref_wav"):
+
+        if path == "/score" and not data.get("ref_wav"):
+            self._send(
+                *_json_error(
+                    "ref_wav is required",
+                    extra={"engine": "phoneme"},
+                )
+            )
+            return
+
+        if path not in ("/tts", "/phonemes", "/score"):
+            self._send(*_json_error("not found", status=404))
+            return
+
+        try:
+            from pronounce.serve import engines
+
+            if path == "/tts":
+                text = data.get("text")
+                out = data.get("out")
+                if not text or not out:
+                    self._send(
+                        *_json_error(
+                            "text and out are required",
+                            extra={"command": "tts"},
+                        )
+                    )
+                    return
+                result = engines.tts_to_file(
+                    text=str(text),
+                    out=str(out),
+                    voice=str(data.get("voice") or "af_heart"),
+                    lang=str(data.get("lang") or "en-us"),
+                )
+                self._send(200, result)
+                return
+
+            if path == "/phonemes":
+                text = data.get("text")
+                if not text:
+                    self._send(
+                        *_json_error(
+                            "text is required",
+                            extra={"command": "phonemes"},
+                        )
+                    )
+                    return
+                result = engines.dictionary_ipa(
+                    text=str(text),
+                    lang=str(data.get("lang") or "en-us"),
+                )
+                self._send(200, result)
+                return
+
+            # /score
+            text = data.get("text")
+            user_wav = data.get("user_wav")
+            ref_wav = data.get("ref_wav")
+            if not text or not user_wav or not ref_wav:
                 self._send(
                     *_json_error(
-                        "ref_wav is required",
+                        "text, user_wav, and ref_wav are required",
                         extra={"engine": "phoneme"},
                     )
                 )
                 return
-            self._send(*_json_error("not implemented", extra={"engine": "phoneme"}))
-            return
-        if path in ("/tts", "/phonemes"):
-            self._send(*_json_error("not implemented", extra={"command": path.lstrip("/")}))
-            return
-        self._send(*_json_error("not found", status=404))
+            result = engines.score_phoneme(
+                text=str(text),
+                user_wav=str(user_wav),
+                ref_wav=str(ref_wav),
+                lang=str(data.get("lang") or "en-us"),
+                device=str(data.get("device") or "cpu"),
+            )
+            self._send(200, result)
+        except (FileNotFoundError, ValueError) as e:
+            extra: dict[str, Any] = (
+                {"engine": "phoneme"}
+                if path == "/score"
+                else {"command": path.lstrip("/")}
+            )
+            self._send(*_json_error(str(e), status=400, extra=extra))
+        except Exception as e:
+            extra = (
+                {"engine": "phoneme"}
+                if path == "/score"
+                else {"command": path.lstrip("/")}
+            )
+            self._send(*_json_error(str(e), status=500, extra=extra))
 
 
 def make_server(host: str, port: int, load: bool = True) -> ThreadingHTTPServer:
