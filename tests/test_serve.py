@@ -63,6 +63,18 @@ class TestServeHttp(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertEqual(data["command"], "serve")
 
+    @patch("pronounce.serve.app.serve", side_effect=KeyboardInterrupt)
+    def test_cli_ctrl_c_exits_quietly(self, _serve):
+        import contextlib
+        out = io.StringIO()
+        err = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(["serve", "--no-load"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().strip(), "")
+        self.assertIn("stopped", err.getvalue().lower())
+        self.assertNotIn("traceback", err.getvalue().lower())
+
 
 class TestServeEnginesMocked(unittest.TestCase):
     def setUp(self):
@@ -130,6 +142,50 @@ class TestServeEnginesMocked(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(data["engine"], "phoneme")
         score.assert_called_once()
+
+    @patch("pronounce.serve.engines.tts_to_file")
+    def test_tts_forwards_ipa(self, tts):
+        tts.return_value = {"ok": True, "command": "tts", "ipa": "ɪ"}
+        status, data = self._post(
+            "/tts",
+            {"text": "/ɪ/", "out": "/tmp/ih.wav", "ipa": "ɪ"},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(data["ok"])
+        tts.assert_called_once()
+        self.assertEqual(tts.call_args.kwargs["ipa"], "ɪ")
+
+    @patch("pronounce.serve.engines.score_phoneme")
+    def test_score_ipa_without_text(self, score):
+        score.return_value = {"ok": True, "engine": "phoneme", "score": 70}
+        status, data = self._post(
+            "/score",
+            {
+                "ipa": "ɪ",
+                "user_wav": "/tmp/u.wav",
+                "ref_wav": "/tmp/r.wav",
+            },
+        )
+        self.assertEqual(status, 200)
+        score.assert_called_once()
+        self.assertEqual(score.call_args.kwargs["ipa"], "ɪ")
+        self.assertIsNone(score.call_args.kwargs["text"])
+
+    @patch("pronounce.serve.engines.score_phoneme")
+    def test_score_forwards_ipa(self, score):
+        score.return_value = {"ok": True, "engine": "phoneme", "score": 70}
+        status, data = self._post(
+            "/score",
+            {
+                "text": "/ɪ/",
+                "user_wav": "/tmp/u.wav",
+                "ref_wav": "/tmp/r.wav",
+                "ipa": "ɪ",
+            },
+        )
+        self.assertEqual(status, 200)
+        score.assert_called_once()
+        self.assertEqual(score.call_args.kwargs["ipa"], "ɪ")
 
 
 class TestServeBind(unittest.TestCase):

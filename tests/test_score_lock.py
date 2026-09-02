@@ -46,7 +46,7 @@ class TestScorePhonemeLock(unittest.TestCase):
         wav = np.zeros(8, dtype=np.float32)
 
         with (
-            patch("pronounce.serve.engines.Path") as path_cls,
+            patch("pronounce.score.jobs.Path") as path_cls,
             patch("soundfile.read", return_value=(wav, 16000)),
             patch(
                 "pronounce.common.audio.prepare_waveform",
@@ -80,6 +80,7 @@ class TestScorePhonemeLock(unittest.TestCase):
         ):
             path_inst = MagicMock()
             path_inst.is_file.return_value = True
+            path_inst.expanduser.return_value = path_inst
             path_inst.resolve.return_value = path_inst
             path_inst.__str__ = lambda self: "/tmp/x.wav"
             path_cls.return_value = path_inst

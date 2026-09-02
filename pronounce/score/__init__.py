@@ -19,7 +19,8 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     """注册 ``score {phoneme|acoustic}`` 及其参数。"""
     score = sub.add_parser("score", help="score a spoken take")
     score.add_argument("engine", choices=("phoneme", "acoustic"))
-    score.add_argument("--text", required=True)
+    score.add_argument("--text", default=None)
+    score.add_argument("--ipa", default=None, help="isolated IPA phone (phoneme engine; skips G2P)")
     score.add_argument("--user", required=True)
     score.add_argument("--ref", default=None)
     score.add_argument("--lang", default="en-us")
@@ -81,6 +82,11 @@ def _synthesize_ref(args: argparse.Namespace) -> Path:
 def run(args: argparse.Namespace) -> int:
     """跑一次打分。成功打印 payload JSON，返回 0。"""
     engine = args.engine
+    if args.ipa and engine != "phoneme":
+        return _fail(engine, "--ipa is only valid with the phoneme engine")
+    if not args.text and not args.ipa:
+        return _fail(engine, "text or ipa is required")
+
     model_name = str(
         wav2vec2_model(
             "wav2vec2-xlsr-53-espeak-cv-ft"
@@ -102,41 +108,35 @@ def run(args: argparse.Namespace) -> int:
         return _fail(engine, f"reference audio not found: {ref_path}")
 
     try:
-        from pronounce.common.audio import TARGET_SAMPLE_RATE, prepare_waveform
-        from pronounce.score.json_out import to_payload
-        from pronounce.score.prosody import compute_prosody, user_only_prosody
+        if engine == "phoneme":
+            from pronounce.score.jobs import score_phoneme
 
-        if engine == "acoustic" and ref_path is None:
+            payload = score_phoneme(
+                text=args.text,
+                user_wav=str(user_path),
+                ref_wav=str(ref_path) if ref_path is not None else None,
+                lang=args.lang,
+                device=args.device,
+                ipa=args.ipa,
+                calibration=args.calibration,
+                user_name=args.user_name or "",
+            )
+            print(json.dumps(payload))
+            return 0
+
+        from pronounce.common.audio import TARGET_SAMPLE_RATE, prepare_waveform
+        from pronounce.score.acoustic import AnalyzerConfig, analyze, configure, load_models
+        from pronounce.score.json_out import to_payload
+        from pronounce.score.prosody import compute_prosody
+
+        if ref_path is None:
             ref_path = _synthesize_ref(args)
             ref_generated = True
 
         user_audio, user_sr = _load_wav(str(user_path))
         user_audio = prepare_waveform(user_audio, user_sr)
-        user_sr = TARGET_SAMPLE_RATE
-
-        reference_audio = None
-        reference_sr = TARGET_SAMPLE_RATE
-        if ref_path is not None:
-            reference_audio, reference_sr = _load_wav(str(ref_path))
-            reference_audio = prepare_waveform(reference_audio, reference_sr)
-            reference_sr = TARGET_SAMPLE_RATE
-
-        # 两个引擎的公开 API 同名（analyze / configure / load_models），
-        # 按 engine 选包即可，后面调用不用再分支。
-        if engine == "phoneme":
-            from pronounce.score.phoneme import (
-                AnalyzerConfig,
-                analyze,
-                configure,
-                load_models,
-            )
-        else:
-            from pronounce.score.acoustic import (
-                AnalyzerConfig,
-                analyze,
-                configure,
-                load_models,
-            )
+        reference_audio, reference_sr = _load_wav(str(ref_path))
+        reference_audio = prepare_waveform(reference_audio, reference_sr)
 
         cal = Path(args.calibration).expanduser().resolve() if args.calibration else None
         configure(
@@ -153,21 +153,18 @@ def run(args: argparse.Namespace) -> int:
             user_audio,
             args.text,
             reference_audio=reference_audio,
-            user_sr=user_sr,
-            reference_sr=reference_sr,
+            user_sr=TARGET_SAMPLE_RATE,
+            reference_sr=TARGET_SAMPLE_RATE,
         )
-        if reference_audio is not None:
-            contours = compute_prosody(
-                user_audio, user_sr, reference_audio, reference_sr
-            )
-        else:
-            contours = user_only_prosody(user_audio, user_sr)
+        contours = compute_prosody(
+            user_audio, TARGET_SAMPLE_RATE, reference_audio, TARGET_SAMPLE_RATE
+        )
         payload = to_payload(
             engine=engine,
             result=result,
             text=args.text,
             user_wav=str(user_path),
-            ref_wav=str(ref_path) if ref_path is not None else None,
+            ref_wav=str(ref_path),
             prosody=contours,
         )
         if ref_generated:

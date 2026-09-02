@@ -69,20 +69,22 @@ class RepeatHandler(BaseHTTPRequestHandler):
 
             if path == "/tts":
                 text = data.get("text")
+                ipa = data.get("ipa")
                 out = data.get("out")
-                if not text or not out:
+                if not out or (not text and not ipa):
                     self._send(
                         *_json_error(
-                            "text and out are required",
+                            "out and text or ipa are required",
                             extra={"command": "tts"},
                         )
                     )
                     return
                 result = engines.tts_to_file(
-                    text=str(text),
+                    text=str(text) if text else None,
                     out=str(out),
                     voice=str(data.get("voice") or "af_heart"),
-                    lang=str(data.get("lang") or "en-us"),
+                    lang=str(data["lang"]) if data.get("lang") else None,
+                    ipa=str(ipa) if ipa else None,
                 )
                 self._send(200, result)
                 return
@@ -106,22 +108,24 @@ class RepeatHandler(BaseHTTPRequestHandler):
 
             # /score
             text = data.get("text")
+            ipa = data.get("ipa")
             user_wav = data.get("user_wav")
             ref_wav = data.get("ref_wav")
-            if not text or not user_wav or not ref_wav:
+            if (not text and not ipa) or not user_wav or not ref_wav:
                 self._send(
                     *_json_error(
-                        "text, user_wav, and ref_wav are required",
+                        "text or ipa, user_wav, and ref_wav are required",
                         extra={"engine": "phoneme"},
                     )
                 )
                 return
             result = engines.score_phoneme(
-                text=str(text),
+                text=str(text) if text else None,
                 user_wav=str(user_wav),
                 ref_wav=str(ref_wav),
                 lang=str(data.get("lang") or "en-us"),
                 device=str(data.get("device") or "cpu"),
+                ipa=str(ipa) if ipa else None,
             )
             self._send(200, result)
         except (FileNotFoundError, ValueError) as e:

@@ -7,7 +7,70 @@ Stdout is one JSON object per invocation.
 
 ## HTTP serve
 
-`pronounce serve` exposes `POST /tts`, `POST /phonemes`, and `POST /score` on loopback. Success and failure bodies match the CLI JSON objects for those commands (same fields as below); `GET /health` returns `{"ok": true, "engine": "phoneme", "tts": "kokoro"}`.
+`pronounce serve` binds loopback (`127.0.0.1` / `localhost` / `::1`, default port `8787`). JSON bodies match the CLI objects for `tts`, `phonemes`, and `score phoneme`. Isolated-phone TTS extras are in this section. CLI `tts --ipa` and `score phoneme --ipa` call the same helpers.
+
+`serve` itself does not print a success JSON object; the HTTP response body is the contract. Bind failure: `{"ok": false, "command": "serve", "error": "..."}` on stdout, exit 1.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `GET` | `/health` | `{"ok": true, "engine": "phoneme", "tts": "kokoro"}` (Kokoro is the warmed sentence engine; isolated phones still use espeak-ng) |
+| `POST` | `/tts` | Same as CLI `tts`. No `speed` (always native). `"ipa"` = CLI `--ipa` |
+| `POST` | `/phonemes` | Same as CLI `phonemes` |
+| `POST` | `/score` | Phoneme engine only. `ref_wav` is required (CLI `--ref` is optional) |
+
+Not exposed: `score acoustic`, `tts-zh`, `--calibration`. Unknown path: `404` `{"ok": false, "error": "not found"}`. Invalid/missing JSON body: `400` `{"ok": false, "error": "invalid json"}`. Handler errors: `400` (`FileNotFoundError` / `ValueError`) or `500`, still `{"ok": false, "error": "..."}` plus `engine` or `command`.
+
+### Request bodies
+
+`POST /tts`:
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `out` | yes | Output wav path |
+| `text` | if no `ipa` | Sentence for Kokoro |
+| `ipa` | if no `text` | One Unicode IPA phone (e.g. `"ɪ"`). Speaks with espeak-ng, not Kokoro. Same as CLI `--ipa` |
+| `voice` | no | Kokoro voice (default `af_heart`). Ignored when `ipa` is set |
+| `lang` | no | `en-us` / `en-gb`. Default `en-gb` when `ipa` is set, else `en-us` |
+
+`POST /score` (phoneme engine only):
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `text` | if no `ipa` | Target phrase, or a label such as `"/ɪ/"` when scoring a phone |
+| `ipa` | if no `text` | When set, expected phones are this IPA (after normalize); G2P from `text` is skipped. Same as CLI `--ipa` |
+| `user_wav` | yes | User take |
+| `ref_wav` | yes | Reference wav |
+| `lang` | no | Default `en-us` |
+| `device` | no | Default `cpu` |
+
+`POST /phonemes`: `{ "text", "lang"? }` — same as CLI `phonemes`.
+
+### Isolated-phone TTS response
+
+Same keys as CLI [`tts`](#tts), with:
+
+| Field | Difference |
+|-------|------------|
+| `voice` | `"espeak"` |
+| `ipa` | Echo of the request phone |
+| `text` | Request `text`, or `"/{ipa}/"` if `text` was omitted |
+| `sample_rate` / `native_rate` | espeak-ng rate (`22050`), not Kokoro `24000` |
+| `speed` | Always `1.0` (no tape-slow) |
+
+```json
+{
+  "ok": true,
+  "command": "tts",
+  "text": "/ɪ/",
+  "voice": "espeak",
+  "lang": "en-gb",
+  "out": "/abs/path/ih-en-gb.wav",
+  "speed": 1.0,
+  "sample_rate": 22050,
+  "native_rate": 22050,
+  "ipa": "ɪ"
+}
+```
 
 ## Always present (success)
 
@@ -331,14 +394,15 @@ Acoustic score without `--ref` synthesizes a native-speed Kokoro wav, sets `ref_
 | `ok` | bool | `true` |
 | `command` | `"tts"` | Which subcommand ran |
 | `text` | string | `--text` (word, sentence, or paragraph) |
-| `voice` | string | `--voice` (default `af_heart`) |
-| `lang` | string | `--lang` (`en-us` / `en-gb`) |
+| `voice` | string | `--voice` (default `af_heart`). Isolated-phone TTS: `"espeak"` |
+| `lang` | string | `--lang` (`en-us` / `en-gb`). Isolated-phone TTS defaults to `en-gb` |
 | `out` | string | Absolute `--out` path |
-| `speed` | number | Playback tempo (`1` = native; `0.8` = slower) |
-| `sample_rate` | number | Wav header rate (`native_rate * speed`) |
-| `native_rate` | number | Always `24000` (synthesis rate) |
+| `speed` | number | Playback tempo (`1` = native; `0.8` = slower). Isolated-phone TTS: always `1.0` |
+| `sample_rate` | number | Wav header rate (`native_rate * speed` for Kokoro) |
+| `native_rate` | number | `24000` for Kokoro. Isolated-phone TTS: `22050` |
+| `ipa` | string | Isolated-phone TTS only (`--ipa` / HTTP `"ipa"`); omitted for sentence `tts` |
 
-`--speed` does not change the mouth timing of the model; it writes a lower sample rate so a normal player plays the file slower (same trick mimora uses for slow listen). Scoring reference audio is always synthesized at `speed=1`.
+`--speed` does not change the mouth timing of the model; it writes a lower sample rate so a normal player plays the file slower (same trick mimora uses for slow listen). Scoring reference audio is always synthesized at `speed=1`. Isolated-phone TTS does not apply `--speed`.
 
 ### `tts-zh`
 

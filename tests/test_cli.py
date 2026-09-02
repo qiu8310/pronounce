@@ -71,6 +71,55 @@ class TestCliGuards(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertIn("out", data["error"].lower())
 
+    def test_tts_needs_text_or_ipa(self):
+        """句子 TTS 要 --text；孤立音素要 --ipa。两个都没有应失败。"""
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["tts", "--out", "/tmp/x.wav"])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        err = data["error"].lower()
+        self.assertIn("text", err)
+        self.assertIn("ipa", err)
+
+    def test_tts_ipa_without_text_writes_wav(self):
+        """--ipa 不必再给 --text；JSON 走 espeak，不是 Kokoro。"""
+        import contextlib
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "ih.wav"
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = main(["tts", "--ipa", "ɪ", "--out", str(out)])
+            self.assertEqual(code, 0)
+            data = json.loads(buf.getvalue())
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["command"], "tts")
+            self.assertEqual(data["voice"], "espeak")
+            self.assertEqual(data["ipa"], "ɪ")
+            self.assertEqual(data["lang"], "en-gb")
+            self.assertEqual(data["sample_rate"], 22050)
+            self.assertTrue(out.is_file())
+
+    def test_score_phoneme_ipa_does_not_require_text(self):
+        """孤立音素打分用 --ipa，缺用户 wav 时应抱怨文件，而不是缺 --text。"""
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main([
+                "score", "phoneme", "--ipa", "ɪ",
+                "--user", "/tmp/no-such-take.wav",
+            ])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        self.assertEqual(data["engine"], "phoneme")
+        err = data["error"].lower()
+        self.assertNotIn("unrecognized", err)
+        self.assertIn("user", err)
+        self.assertNotIn("required: --text", err)
+
     def test_tts_zh_requires_out(self):
         """中文 TTS 是独立子命令 tts-zh，缺 --out 时同样 JSON 退出 1。"""
         import contextlib

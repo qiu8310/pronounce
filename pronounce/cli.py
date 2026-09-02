@@ -99,6 +99,9 @@ def run_serve(args: argparse.Namespace) -> int:
     except ValueError as e:
         print(json.dumps({"ok": False, "command": "serve", "error": str(e)}))
         return 1
+    except KeyboardInterrupt:
+        print("serve stopped", file=sys.stderr)
+        return 0
     return 0
 
 

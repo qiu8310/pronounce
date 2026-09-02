@@ -1217,7 +1217,8 @@ def analyze(user_audio: np.ndarray,
             user_sr: int = TARGET_SAMPLE_RATE,
             reference_sr: int = KOKORO_SAMPLE_RATE,
             voice: str | None = None,
-            is_reference: bool = False) -> PronunciationResult:
+            is_reference: bool = False,
+            expected_ipa: str | None = None) -> PronunciationResult:
     """在音素层面比较用户朗读与期望句子。
 
     功能：文本经 espeak 得参考音素，用户 wav 经 wav2vec2 得识别音素，再做特征加权
@@ -1240,7 +1241,14 @@ def analyze(user_audio: np.ndarray,
     _ensure_calibration()
 
     # 从文本得到参考音素（按词分组 -> 拍平序列）。
-    groups = reference_word_phonemes(expected_text, cfg.espeak_language)
+    # Isolated IPA skips G2P: phonemizer reads "ɪ" as the letter name.
+    if expected_ipa:
+        phones = _normalize_phones([expected_ipa.strip()])
+        if not phones:
+            raise ValueError(f"empty expected ipa: {expected_ipa!r}")
+        groups = [phones]
+    else:
+        groups = reference_word_phonemes(expected_text, cfg.espeak_language)
     reference = [p for group in groups for p in group]
     if not reference:
         raise ValueError(f"espeak produced no phonemes for: {expected_text!r}")
