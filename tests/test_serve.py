@@ -113,6 +113,37 @@ class TestServeEnginesMocked(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(data["ok"])
         tts.assert_called_once()
+        self.assertFalse(tts.call_args.kwargs.get("play"))
+
+    @patch("pronounce.serve.engines.tts_to_file")
+    def test_tts_play_without_out(self, tts):
+        tts.return_value = {
+            "ok": True,
+            "command": "tts",
+            "text": "Hello.",
+            "out": None,
+            "played": True,
+        }
+        status, data = self._post("/tts", {"text": "Hello.", "play": True})
+        self.assertEqual(status, 200)
+        self.assertTrue(data["ok"])
+        self.assertIsNone(data["out"])
+        self.assertTrue(data["played"])
+        self.assertTrue(tts.call_args.kwargs["play"])
+        self.assertIsNone(tts.call_args.kwargs["out"])
+
+    def test_tts_requires_out_or_play(self):
+        status, data = self._post("/tts", {"text": "Hello."})
+        self.assertEqual(status, 400)
+        self.assertFalse(data["ok"])
+        err = data["error"].lower()
+        self.assertIn("out", err)
+        self.assertIn("play", err)
+
+    def test_no_tts_zh_route(self):
+        status, data = self._post("/tts-zh", {"text": "你好", "play": True})
+        self.assertEqual(status, 404)
+        self.assertFalse(data["ok"])
 
     @patch("pronounce.serve.engines.dictionary_ipa")
     def test_phonemes_ok(self, ipa):

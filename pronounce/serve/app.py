@@ -70,18 +70,14 @@ class RepeatHandler(BaseHTTPRequestHandler):
             if path == "/tts":
                 text = data.get("text")
                 ipa = data.get("ipa")
-                out = data.get("out")
-                if not out or (not text and not ipa):
-                    self._send(
-                        *_json_error(
-                            "out and text or ipa are required",
-                            extra={"command": "tts"},
-                        )
-                    )
-                    return
+                out_raw = data.get("out")
+                out = str(out_raw).strip() if out_raw else None
+                if not out:
+                    out = None
                 result = engines.tts_to_file(
                     text=str(text) if text else None,
-                    out=str(out),
+                    out=out,
+                    play=data.get("play") is True,
                     voice=str(data.get("voice") or "af_heart"),
                     lang=str(data["lang"]) if data.get("lang") else None,
                     ipa=str(ipa) if ipa else None,
