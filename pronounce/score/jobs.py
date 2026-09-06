@@ -1,4 +1,4 @@
-"""音素打分的文件入口：CLI ``score phoneme`` 和 ``pronounce serve`` 共用。"""
+"""打分文件入口：CLI ``score {phoneme|acoustic}`` 和 ``pronounce serve`` 共用。"""
 
 from __future__ import annotations
 
@@ -92,4 +92,69 @@ def score_phoneme(
         # Echo style only when the caller passed a flag (including explicit
         # "none"/""). Omitted (None) -> no key, preserving today's envelope.
         style=style_norm if style is not None else None,
+    )
+
+
+def score_acoustic(
+    *,
+    text: str,
+    user_wav: str,
+    ref_wav: str,
+    lang: str = "en-us",
+    device: str = "cpu",
+    calibration: str | Path | None = None,
+    user_name: str = "",
+) -> dict:
+    """读 wav、跑 acoustic ``analyze``，返回与 CLI / HTTP ``score`` 相同的成功 JSON。"""
+    from pronounce.common.audio import TARGET_SAMPLE_RATE, prepare_waveform
+    from pronounce.score.acoustic import AnalyzerConfig, analyze, configure, load_models
+    from pronounce.score.json_out import to_payload
+    from pronounce.score.prosody import compute_prosody
+
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("text is required")
+
+    user_path = Path(user_wav).expanduser().resolve()
+    ref_path = Path(ref_wav).expanduser().resolve() if ref_wav else None
+    if not user_path.is_file():
+        raise FileNotFoundError(f"user audio not found: {user_path}")
+    if not ref_wav or ref_path is None or not ref_path.is_file():
+        raise FileNotFoundError("reference audio not found")
+
+    import soundfile as sf
+
+    user_audio, user_sr = sf.read(str(user_path), dtype="float32", always_2d=False)
+    user_audio = prepare_waveform(user_audio, int(user_sr))
+    reference_audio, ref_sr = sf.read(str(ref_path), dtype="float32", always_2d=False)
+    reference_audio = prepare_waveform(reference_audio, int(ref_sr))
+
+    cal = Path(calibration).expanduser().resolve() if calibration else None
+    configure(
+        AnalyzerConfig(
+            model_name=str(wav2vec2_model("wav2vec2-large-960h")),
+            device=device,
+            espeak_language=lang,
+            user_name=user_name or "",
+            calibration_file=cal,
+        )
+    )
+    load_models()
+    result = analyze(
+        user_audio,
+        text,
+        reference_audio=reference_audio,
+        user_sr=TARGET_SAMPLE_RATE,
+        reference_sr=TARGET_SAMPLE_RATE,
+    )
+    contours = compute_prosody(
+        user_audio, TARGET_SAMPLE_RATE, reference_audio, TARGET_SAMPLE_RATE
+    )
+    return to_payload(
+        engine="acoustic",
+        result=result,
+        text=text,
+        user_wav=str(user_path),
+        ref_wav=str(ref_path),
+        prosody=contours,
     )

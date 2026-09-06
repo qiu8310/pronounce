@@ -130,48 +130,20 @@ def run(args: argparse.Namespace) -> int:
             print(json.dumps(payload))
             return 0
 
-        from pronounce.common.audio import TARGET_SAMPLE_RATE, prepare_waveform
-        from pronounce.score.acoustic import AnalyzerConfig, analyze, configure, load_models
-        from pronounce.score.json_out import to_payload
-        from pronounce.score.prosody import compute_prosody
+        from pronounce.score.jobs import score_acoustic
 
         if ref_path is None:
             ref_path = _synthesize_ref(args)
             ref_generated = True
 
-        user_audio, user_sr = _load_wav(str(user_path))
-        user_audio = prepare_waveform(user_audio, user_sr)
-        reference_audio, reference_sr = _load_wav(str(ref_path))
-        reference_audio = prepare_waveform(reference_audio, reference_sr)
-
-        cal = Path(args.calibration).expanduser().resolve() if args.calibration else None
-        configure(
-            AnalyzerConfig(
-                model_name=model_name,
-                device=args.device,
-                espeak_language=args.lang,
-                user_name=args.user_name or "",
-                calibration_file=cal,
-            )
-        )
-        load_models()
-        result = analyze(
-            user_audio,
-            args.text,
-            reference_audio=reference_audio,
-            user_sr=TARGET_SAMPLE_RATE,
-            reference_sr=TARGET_SAMPLE_RATE,
-        )
-        contours = compute_prosody(
-            user_audio, TARGET_SAMPLE_RATE, reference_audio, TARGET_SAMPLE_RATE
-        )
-        payload = to_payload(
-            engine=engine,
-            result=result,
+        payload = score_acoustic(
             text=args.text,
             user_wav=str(user_path),
             ref_wav=str(ref_path),
-            prosody=contours,
+            lang=args.lang,
+            device=args.device,
+            calibration=args.calibration,
+            user_name=args.user_name or "",
         )
         if ref_generated:
             payload["ref_generated"] = True
