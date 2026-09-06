@@ -146,7 +146,7 @@ class TestCliGuards(unittest.TestCase):
         self.assertNotIn("required: --text", err)
 
     def test_tts_zh_requires_out(self):
-        """中文 TTS 是独立子命令 tts-zh，缺 --out 时同样 JSON 退出 1。"""
+        """中文 TTS 是独立子命令 tts-zh，既无 --out 也无 --play 时 JSON 退出 1。"""
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -154,7 +154,32 @@ class TestCliGuards(unittest.TestCase):
         self.assertEqual(code, 1)
         data = json.loads(buf.getvalue())
         self.assertFalse(data["ok"])
-        self.assertIn("out", data["error"].lower())
+        err = data["error"].lower()
+        self.assertIn("out", err)
+        self.assertIn("play", err)
+
+    def test_tts_zh_play_flag_reaches_to_file(self):
+        import contextlib
+        from unittest.mock import patch
+
+        buf = io.StringIO()
+        fake = {
+            "ok": True,
+            "command": "tts-zh",
+            "text": "你好",
+            "out": None,
+            "played": True,
+        }
+        with patch("pronounce.tts_zh.to_file", return_value=fake) as tf:
+            with contextlib.redirect_stdout(buf):
+                code = main(["tts-zh", "--text", "你好", "--play"])
+        self.assertEqual(code, 0)
+        tf.assert_called_once()
+        self.assertTrue(tf.call_args.kwargs["play"])
+        self.assertIsNone(tf.call_args.kwargs["out"])
+        data = json.loads(buf.getvalue())
+        self.assertIsNone(data["out"])
+        self.assertTrue(data["played"])
 
     def test_tts_zh_is_not_tts_lang(self):
         """原来的 tts 不接受 zh；中文走 tts-zh，不是 --lang zh。"""
