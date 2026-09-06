@@ -7,18 +7,18 @@ Stdout is one JSON object per invocation.
 
 ## HTTP serve
 
-`pronounce serve` binds loopback (`127.0.0.1` / `localhost` / `::1`, default port `8787`). JSON bodies match the CLI objects for `tts`, `phonemes`, and `score phoneme`. Isolated-phone TTS extras are in this section. CLI `tts --ipa` and `score phoneme --ipa` call the same helpers.
+`pronounce serve` binds loopback (`127.0.0.1` / `localhost` / `::1`, default port `8787`). JSON bodies match the CLI objects for `tts`, `phonemes`, and `score` (phoneme or acoustic). Isolated-phone TTS extras are in this section. CLI `tts --ipa` and `score phoneme --ipa` call the same helpers.
 
 `serve` itself does not print a success JSON object; the HTTP response body is the contract. Bind failure: `{"ok": false, "command": "serve", "error": "..."}` on stdout, exit 1.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| `GET` | `/health` | `{"ok": true, "engine": "phoneme", "tts": "kokoro"}` (Kokoro is the warmed sentence engine; isolated phones still use espeak-ng) |
-| `POST` | `/tts` | Same as CLI `tts`. No `speed` (always native). `"ipa"` = CLI `--ipa` |
+| `GET` | `/health` | `{"ok": true, "engine": "phoneme+acoustic", "tts": "kokoro"}` (Kokoro is the warmed sentence engine; isolated phones still use espeak-ng) |
+| `POST` | `/tts` | Same as CLI `tts`. Optional `speed` (default `1`; ignored when `"ipa"` is set). `"ipa"` = CLI `--ipa` |
 | `POST` | `/phonemes` | Same as CLI `phonemes` |
-| `POST` | `/score` | Phoneme engine only. `ref_wav` is required (CLI `--ref` is optional) |
+| `POST` | `/score` | Phoneme (default) or acoustic via `"engine"`. `ref_wav` required for both (HTTP never auto-synthesizes ref) |
 
-Not exposed: `score acoustic`, `tts-zh`, `--calibration`. Unknown path: `404` `{"ok": false, "error": "not found"}`. Invalid/missing JSON body: `400` `{"ok": false, "error": "invalid json"}`. Handler errors: `400` (`FileNotFoundError` / `ValueError`) or `500`, still `{"ok": false, "error": "..."}` plus `engine` or `command`.
+Not exposed: `tts-zh`, `--calibration`. Unknown path: `404` `{"ok": false, "error": "not found"}`. Invalid/missing JSON body: `400` `{"ok": false, "error": "invalid json"}`. Handler errors: `400` (`FileNotFoundError` / `ValueError`) or `500`, still `{"ok": false, "error": "..."}` plus `engine` or `command`.
 
 ### Request bodies
 
@@ -32,19 +32,21 @@ Not exposed: `score acoustic`, `tts-zh`, `--calibration`. Unknown path: `404` `{
 | `ipa` | if no `text` | One Unicode IPA phone (e.g. `"ɪ"`). Speaks with espeak-ng, not Kokoro. Same as CLI `--ipa` |
 | `voice` | no | Kokoro voice (default `af_heart`). Ignored when `ipa` is set |
 | `lang` | no | `en-us` / `en-gb` / `en-gb-x-rp`. Default `en-gb` when `ipa` is set, else `en-us` |
+| `speed` | no | Playback tempo, default `1`. Ignored when `ipa` is set (isolated-phone TTS is always native rate) |
 
 At least one of non-empty `out` or `play: true`.
 
-`POST /score` (phoneme engine only):
+`POST /score`:
 
 | Field | Required | Meaning |
 |-------|----------|---------|
-| `text` | if no `ipa` | Target phrase, or a label such as `"/ɪ/"` when scoring a phone |
-| `ipa` | if no `text` | When set, expected phones are this IPA (after normalize); G2P from `text` is skipped. Same as CLI `--ipa` |
+| `engine` | no | `"phoneme"` (default) or `"acoustic"` |
+| `text` | if no `ipa` | Target phrase. Required for acoustic; for phoneme optional when `ipa` is set (label such as `"/ɪ/"`) |
+| `ipa` | if no `text` | Phoneme engine only. When set, expected phones are this IPA (after normalize); G2P from `text` is skipped. Same as CLI `--ipa`. Rejected when `engine` is `"acoustic"` |
 | `user_wav` | yes | User take |
-| `ref_wav` | yes | Reference wav |
+| `ref_wav` | yes | Reference wav (required for both engines; HTTP never auto-synthesizes ref) |
 | `lang` | no | Default `en-us` (`en-us` / `en-gb` / `en-gb-x-rp`) |
-| `style` | no | Display rewrite for `ipa_words`: `none` / `dj44` / `dj48`. Default `none`. See [Display style](#display-style-style) |
+| `style` | no | Phoneme engine only. Display rewrite for `ipa_words`: `none` / `dj44` / `dj48`. Default `none`. Rejected when `engine` is `"acoustic"`. See [Display style](#display-style-style) |
 | `device` | no | Default `cpu` |
 
 `POST /phonemes`: `{ "text", "lang"?, "style"? }` — same as CLI `phonemes`.

@@ -71,7 +71,7 @@ Kokoro 不能念 IPA；把 `ɪ` 当 `--text` 还会被 G2P 读成字母名。`--
 
 ## 声学打分
 
-声学引擎需要参考音：给 `--ref`，或省略后由 Kokoro 按 `--voice` 合成（JSON 里会有 `"ref_generated": true`）。`serve` **没有**声学引擎，只有 CLI。
+声学引擎需要参考音：CLI 可给 `--ref`，或省略后由 Kokoro 按 `--voice` 合成（JSON 里会有 `"ref_generated": true`）。`serve` 的 `POST /score` 也支持 `"engine":"acoustic"`，但 **必须** 带 `ref_wav`（HTTP 不会自动合成参考音）。
 
 ```bash
 "$PY" -m pronounce score acoustic --text "Hello" --user "$DEMO/hello-en-us.wav" --ref "$DEMO/hello-en-gb.wav" --device cpu
@@ -80,7 +80,7 @@ Kokoro 不能念 IPA；把 `ɪ` 当 `--text` 还会被 G2P 读成字母名。`--
 
 ## 常驻 HTTP serve
 
-给 Oral 用的 loopback worker：启动时预热 phoneme + Kokoro，之后 `POST /tts`、`POST /phonemes`、`POST /score` 和 CLI 走同一套函数。只绑 `127.0.0.1` / `localhost` / `::1`。JSON 在 HTTP 响应体里，访问日志在 stderr。`/score` 必须带 `ref_wav`（CLI phoneme 的 `--ref` 仍可省略）。没有 `score acoustic`、`tts-zh`、`--speed`。Ctrl+C 在 stderr 打 `serve stopped` 后退出。
+给 Oral 用的 loopback worker：启动时预热 phoneme + acoustic + Kokoro，之后 `POST /tts`、`POST /phonemes`、`POST /score` 和 CLI 走同一套函数。只绑 `127.0.0.1` / `localhost` / `::1`。JSON 在 HTTP 响应体里，访问日志在 stderr。`/score` 必须带 `ref_wav`（CLI phoneme 的 `--ref` 仍可省略）；`"engine"` 默认 phoneme，可选 acoustic。`/tts` 可选 `"speed"`（`"ipa"` 时忽略）。没有 `tts-zh`、`--calibration`。Ctrl+C 在 stderr 打 `serve stopped` 后退出。
 
 另开一个终端：
 
@@ -102,11 +102,19 @@ curl -sS -X POST http://127.0.0.1:8787/tts \
 
 curl -sS -X POST http://127.0.0.1:8787/tts \
   -H 'Content-Type: application/json' \
+  -d '{"text":"Hello.","out":"/tmp/hello-slow.wav","speed":0.8}'
+
+curl -sS -X POST http://127.0.0.1:8787/tts \
+  -H 'Content-Type: application/json' \
   -d '{"text":"Hello","play":true}'
 
 curl -sS -X POST http://127.0.0.1:8787/score \
   -H 'Content-Type: application/json' \
   -d "{\"text\":\"Hello\",\"user_wav\":\"$DEMO/hello-en-us.wav\",\"ref_wav\":\"$DEMO/hello-en-gb.wav\",\"lang\":\"en-us\"}"
+
+curl -sS -X POST http://127.0.0.1:8787/score \
+  -H 'Content-Type: application/json' \
+  -d "{\"engine\":\"acoustic\",\"text\":\"Hello\",\"user_wav\":\"$DEMO/hello-en-us.wav\",\"ref_wav\":\"$DEMO/hello-en-gb.wav\"}"
 
 # 孤立 ɪ（默认 lang=en-gb）
 curl -sS -X POST http://127.0.0.1:8787/tts \

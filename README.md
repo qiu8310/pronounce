@@ -91,7 +91,7 @@ Success: one JSON object on stdout, exit 0. Failure: `{"ok": false, ... "error":
 
 ## Serve
 
-Loopback HTTP worker for Oral. Warms the phoneme engine and Kokoro once, then `POST /tts`, `POST /phonemes`, and `POST /score` call the same helpers as the CLI (`pronounce.tts.to_file`, `pronounce.score.jobs.score_phoneme`, dictionary IPA). Bind only `127.0.0.1`, `localhost`, or `::1`. Copy-paste curls: [`demo/`](demo/README.md). Request/response fields: [`FIELDS.md`](FIELDS.md#http-serve).
+Loopback HTTP worker for Oral. Warms the phoneme and acoustic engines plus Kokoro once, then `POST /tts`, `POST /phonemes`, and `POST /score` call the same helpers as the CLI (`pronounce.tts.to_file`, `pronounce.score.jobs.score_phoneme` / `score_acoustic`, dictionary IPA). Bind only `127.0.0.1`, `localhost`, or `::1`. Copy-paste curls: [`demo/`](demo/README.md). Request/response fields: [`FIELDS.md`](FIELDS.md#http-serve).
 
 ```bash
 "$MODELS_HOME/.venv/bin/python" -m pronounce serve --port 8787
@@ -106,9 +106,9 @@ Loopback HTTP worker for Oral. Warms the phoneme engine and Kokoro once, then `P
 
 | Method | Path | CLI equivalent |
 |--------|------|----------------|
-| `GET` | `/health` | — (`{"ok": true, "engine": "phoneme", "tts": "kokoro"}`) |
-| `POST` | `/tts` | `tts` (no `--speed`; isolated phones via `"ipa"`) |
+| `GET` | `/health` | — (`{"ok": true, "engine": "phoneme+acoustic", "tts": "kokoro"}`) |
+| `POST` | `/tts` | `tts` (optional `"speed"`; isolated phones via `"ipa"`) |
 | `POST` | `/phonemes` | `phonemes` |
-| `POST` | `/score` | `score phoneme` (`ref_wav` required) |
+| `POST` | `/score` | `score phoneme` or `score acoustic` via `"engine"` (`ref_wav` required) |
 
-Not exposed: `score acoustic`, `tts-zh`, `--speed`, `--calibration`. A non-loopback `--host` prints `{"ok": false, "command": "serve", "error": "..."}` on stdout and exits 1. Ctrl+C prints `serve stopped` on stderr and exits 0.
+Not exposed: `tts-zh`, `--calibration`. A non-loopback `--host` prints `{"ok": false, "command": "serve", "error": "..."}` on stdout and exits 1. Ctrl+C prints `serve stopped` on stderr and exits 0.
