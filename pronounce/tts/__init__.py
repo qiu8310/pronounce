@@ -10,6 +10,7 @@ import argparse
 import json
 from pathlib import Path
 
+from pronounce.common.play import play_audio, require_destination
 from pronounce.tts.kokoro import (
     DEFAULT_VOICE,
     KOKORO_SAMPLE_RATE,
@@ -36,7 +37,8 @@ __all__ = [
 
 def to_file(
     *,
-    out: str,
+    out: str | None = None,
+    play: bool = False,
     text: str | None = None,
     voice: str = DEFAULT_VOICE,
     lang: str | None = None,
@@ -44,15 +46,14 @@ def to_file(
     speed: float = 1.0,
     ipa: str | None = None,
 ) -> dict:
-    """合成并写 wav，返回与 CLI / HTTP ``tts`` 相同的成功 JSON。"""
+    """合成并可选写 wav / 播放，返回与 CLI / HTTP ``tts`` 相同的成功 JSON。"""
     ipa = (ipa or "").strip() or None
     text = (text or "").strip() or None
-    if not out or (not text and not ipa):
-        raise ValueError("out and text or ipa are required")
+    require_destination(out, play)
+    if not text and not ipa:
+        raise ValueError("text or ipa is required")
     lang = lang or ("en-gb" if ipa else "en-us")
     text = text or f"/{ipa}/"
-    path = Path(out).expanduser().resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
     if ipa:
         from pronounce.tts.espeak import synthesize_ipa
 
@@ -66,16 +67,25 @@ def to_file(
         audio = synthesize(text, voice=voice, lang=lang, device=device)
         speed_out = speed
         voice_out = voice
-    import soundfile as sf
+    out_path = (out or "").strip() or None
+    written = None
+    if out_path:
+        path = Path(out_path).expanduser().resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        import soundfile as sf
 
-    sf.write(str(path), audio, rate)
+        sf.write(str(path), audio, rate)
+        written = str(path)
+    if play:
+        play_audio(audio, rate)
     payload = {
         "ok": True,
         "command": "tts",
         "text": text,
         "voice": voice_out,
         "lang": lang,
-        "out": str(path),
+        "out": written,
+        "played": play,
         "speed": speed_out,
         "sample_rate": rate,
         "native_rate": native_rate,
@@ -86,11 +96,12 @@ def to_file(
 
 
 def add_parser(sub: argparse._SubParsersAction) -> None:
-    """注册 ``tts``：``--out`` 必填，``--text`` 或 ``--ipa`` 二选一。"""
+    """注册 ``tts``：``--out`` 或 ``--play``，``--text`` 或 ``--ipa`` 二选一。"""
     tts = sub.add_parser("tts", help="synthesize English speech (Kokoro) or one IPA phone (espeak)")
     tts.add_argument("--text", default=None)
     tts.add_argument("--ipa", default=None, help="isolated IPA phone; uses espeak-ng, not Kokoro")
-    tts.add_argument("--out", required=True)
+    tts.add_argument("--out", default=None)
+    tts.add_argument("--play", action="store_true")
     tts.add_argument("--voice", default="af_heart")
     tts.add_argument("--lang", default=None, help="en-us / en-gb; default en-gb with --ipa")
     tts.add_argument("--device", default="cpu")
@@ -111,6 +122,7 @@ def run(args: argparse.Namespace) -> int:
                 to_file(
                     text=args.text,
                     out=args.out,
+                    play=args.play,
                     voice=args.voice,
                     lang=args.lang,
                     device=args.device,

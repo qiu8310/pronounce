@@ -69,7 +69,9 @@ class TestCliGuards(unittest.TestCase):
         self.assertEqual(code, 1)
         data = json.loads(buf.getvalue())
         self.assertFalse(data["ok"])
-        self.assertIn("out", data["error"].lower())
+        err = data["error"].lower()
+        self.assertIn("out", err)
+        self.assertIn("play", err)
 
     def test_tts_needs_text_or_ipa(self):
         """句子 TTS 要 --text；孤立音素要 --ipa。两个都没有应失败。"""
@@ -83,6 +85,28 @@ class TestCliGuards(unittest.TestCase):
         err = data["error"].lower()
         self.assertIn("text", err)
         self.assertIn("ipa", err)
+
+    def test_tts_play_flag_reaches_to_file(self):
+        import contextlib
+        from unittest.mock import patch
+
+        buf = io.StringIO()
+        fake = {
+            "ok": True,
+            "command": "tts",
+            "text": "hi",
+            "out": None,
+            "played": True,
+        }
+        with patch("pronounce.tts.to_file", return_value=fake) as tf:
+            with contextlib.redirect_stdout(buf):
+                code = main(["tts", "--text", "hi", "--play"])
+        self.assertEqual(code, 0)
+        tf.assert_called_once()
+        self.assertTrue(tf.call_args.kwargs["play"])
+        self.assertIsNone(tf.call_args.kwargs["out"])
+        self.assertIsNone(json.loads(buf.getvalue())["out"])
+        self.assertTrue(json.loads(buf.getvalue())["played"])
 
     def test_tts_ipa_without_text_writes_wav(self):
         """--ipa 不必再给 --text；JSON 走 espeak，不是 Kokoro。"""
@@ -101,6 +125,7 @@ class TestCliGuards(unittest.TestCase):
             self.assertEqual(data["lang"], "en-gb")
             self.assertEqual(data["sample_rate"], 22050)
             self.assertTrue(out.is_file())
+            self.assertFalse(data["played"])
 
     def test_score_phoneme_ipa_does_not_require_text(self):
         """孤立音素打分用 --ipa，缺用户 wav 时应抱怨文件，而不是缺 --text。"""
