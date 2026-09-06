@@ -40,7 +40,7 @@ class RepeatHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path.split("?", 1)[0] == "/health":
-            self._send(200, {"ok": True, "engine": "phoneme", "tts": "kokoro"})
+            self._send(200, {"ok": True, "engine": "phoneme+acoustic", "tts": "kokoro"})
             return
         self._send(*_json_error("not found", status=404))
 
@@ -51,19 +51,11 @@ class RepeatHandler(BaseHTTPRequestHandler):
             self._send(*_json_error("invalid json"))
             return
 
-        if path == "/score" and not data.get("ref_wav"):
-            self._send(
-                *_json_error(
-                    "ref_wav is required",
-                    extra={"engine": "phoneme"},
-                )
-            )
-            return
-
         if path not in ("/tts", "/phonemes", "/score"):
             self._send(*_json_error("not found", status=404))
             return
 
+        engine = "phoneme"
         try:
             from pronounce.serve import engines
 
@@ -74,6 +66,9 @@ class RepeatHandler(BaseHTTPRequestHandler):
                 out = str(out_raw).strip() if out_raw else None
                 if not out:
                     out = None
+                speed = 1.0
+                if "speed" in data and data["speed"] is not None:
+                    speed = float(data["speed"])
                 result = engines.tts_to_file(
                     text=str(text) if text else None,
                     out=out,
@@ -81,6 +76,7 @@ class RepeatHandler(BaseHTTPRequestHandler):
                     voice=str(data.get("voice") or "af_heart"),
                     lang=str(data["lang"]) if data.get("lang") else None,
                     ipa=str(ipa) if ipa else None,
+                    speed=speed,
                 )
                 self._send(200, result)
                 return
@@ -105,6 +101,50 @@ class RepeatHandler(BaseHTTPRequestHandler):
                 return
 
             # /score
+            engine = str(data.get("engine") or "phoneme")
+            if engine not in ("phoneme", "acoustic"):
+                self._send(*_json_error(f"unknown engine: {engine}", extra={"engine": engine}))
+                return
+            if not data.get("ref_wav"):
+                self._send(*_json_error("ref_wav is required", extra={"engine": engine}))
+                return
+
+            if engine == "acoustic":
+                if data.get("ipa"):
+                    self._send(
+                        *_json_error(
+                            "ipa is only valid with the phoneme engine",
+                            extra={"engine": "acoustic"},
+                        )
+                    )
+                    return
+                if data.get("style") is not None:
+                    self._send(
+                        *_json_error(
+                            "style is only valid with the phoneme engine",
+                            extra={"engine": "acoustic"},
+                        )
+                    )
+                    return
+                text = data.get("text")
+                if not text or not data.get("user_wav"):
+                    self._send(
+                        *_json_error(
+                            "text, user_wav, and ref_wav are required",
+                            extra={"engine": "acoustic"},
+                        )
+                    )
+                    return
+                result = engines.score_acoustic(
+                    text=str(text),
+                    user_wav=str(data["user_wav"]),
+                    ref_wav=str(data["ref_wav"]),
+                    lang=str(data.get("lang") or "en-us"),
+                    device=str(data.get("device") or "cpu"),
+                )
+                self._send(200, result)
+                return
+
             text = data.get("text")
             ipa = data.get("ipa")
             user_wav = data.get("user_wav")
@@ -129,14 +169,14 @@ class RepeatHandler(BaseHTTPRequestHandler):
             self._send(200, result)
         except (FileNotFoundError, ValueError) as e:
             extra: dict[str, Any] = (
-                {"engine": "phoneme"}
+                {"engine": engine}
                 if path == "/score"
                 else {"command": path.lstrip("/")}
             )
             self._send(*_json_error(str(e), status=400, extra=extra))
         except Exception as e:
             extra = (
-                {"engine": "phoneme"}
+                {"engine": engine}
                 if path == "/score"
                 else {"command": path.lstrip("/")}
             )

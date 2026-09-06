@@ -34,7 +34,7 @@ class TestServeHttp(unittest.TestCase):
         status, data = self._request("GET", "/health")
         self.assertEqual(status, 200)
         self.assertEqual(
-            data, {"ok": True, "engine": "phoneme", "tts": "kokoro"}
+            data, {"ok": True, "engine": "phoneme+acoustic", "tts": "kokoro"}
         )
 
     def test_score_requires_ref_wav(self):
@@ -241,6 +241,102 @@ class TestServeEnginesMocked(unittest.TestCase):
         self.assertEqual(status, 200)
         score.assert_called_once()
         self.assertEqual(score.call_args.kwargs["ipa"], "ɪ")
+
+    @patch("pronounce.serve.engines.tts_to_file")
+    def test_tts_forwards_speed(self, tts):
+        tts.return_value = {"ok": True, "command": "tts", "speed": 0.8}
+        status, data = self._post(
+            "/tts", {"text": "Hello.", "out": "/tmp/h.wav", "speed": 0.8}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(tts.call_args.kwargs["speed"], 0.8)
+
+    @patch("pronounce.serve.engines.tts_to_file")
+    def test_tts_default_speed(self, tts):
+        tts.return_value = {"ok": True, "command": "tts", "speed": 1.0}
+        self._post("/tts", {"text": "Hello.", "out": "/tmp/h.wav"})
+        self.assertEqual(tts.call_args.kwargs.get("speed", 1.0), 1.0)
+
+    @patch("pronounce.serve.engines.score_phoneme")
+    def test_score_default_engine_phoneme(self, score):
+        score.return_value = {"ok": True, "engine": "phoneme", "score": 80}
+        status, data = self._post(
+            "/score",
+            {"text": "hi", "user_wav": "/tmp/u.wav", "ref_wav": "/tmp/r.wav"},
+        )
+        self.assertEqual(status, 200)
+        score.assert_called_once()
+        self.assertEqual(data["engine"], "phoneme")
+
+    @patch("pronounce.serve.engines.score_acoustic")
+    def test_score_acoustic_ok(self, score):
+        score.return_value = {"ok": True, "engine": "acoustic", "score": 74}
+        status, data = self._post(
+            "/score",
+            {
+                "engine": "acoustic",
+                "text": "hi",
+                "user_wav": "/tmp/u.wav",
+                "ref_wav": "/tmp/r.wav",
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(data["engine"], "acoustic")
+        score.assert_called_once()
+        self.assertEqual(score.call_args.kwargs["text"], "hi")
+        self.assertEqual(score.call_args.kwargs["ref_wav"], "/tmp/r.wav")
+
+    def test_score_acoustic_rejects_ipa(self):
+        status, data = self._post(
+            "/score",
+            {
+                "engine": "acoustic",
+                "ipa": "ɪ",
+                "user_wav": "/tmp/u.wav",
+                "ref_wav": "/tmp/r.wav",
+                "text": "x",
+            },
+        )
+        self.assertEqual(status, 400)
+        self.assertFalse(data["ok"])
+        self.assertEqual(data.get("engine"), "acoustic")
+        self.assertIn("ipa", data["error"].lower())
+
+    def test_score_acoustic_rejects_style(self):
+        status, data = self._post(
+            "/score",
+            {
+                "engine": "acoustic",
+                "text": "hi",
+                "user_wav": "/tmp/u.wav",
+                "ref_wav": "/tmp/r.wav",
+                "style": "dj48",
+            },
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("style", data["error"].lower())
+
+    def test_score_unknown_engine(self):
+        status, data = self._post(
+            "/score",
+            {
+                "engine": "magic",
+                "text": "hi",
+                "user_wav": "/tmp/u.wav",
+                "ref_wav": "/tmp/r.wav",
+            },
+        )
+        self.assertEqual(status, 400)
+        self.assertFalse(data["ok"])
+
+    def test_score_acoustic_requires_ref_wav(self):
+        status, data = self._post(
+            "/score",
+            {"engine": "acoustic", "text": "hi", "user_wav": "/tmp/u.wav"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("ref_wav", data["error"])
+        self.assertEqual(data.get("engine"), "acoustic")
 
 
 class TestServeBind(unittest.TestCase):
