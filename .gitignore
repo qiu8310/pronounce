@@ -34,3 +34,6 @@ records/
 *.log
 *.csv
 logs/
+
+# Local git worktrees
+.worktrees/
