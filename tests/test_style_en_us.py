@@ -6,19 +6,19 @@ from pronounce.phonemes.style.en_us import style_word
 
 class TestEnUsStyle(unittest.TestCase):
     def test_dj44_city_flap(self):
-        self.assertEqual(style_word("sˈɪɾi", style="dj44"), "sˈɪti")
+        self.assertEqual(style_word("sˈɪɾi", style="dj44"), "ˈsɪti")
 
     def test_dj44_car_rhotic(self):
-        self.assertEqual(style_word("kˈɑːɹ", style="dj44"), "kˈɑːr")
+        self.assertEqual(style_word("kˈɑːɹ", style="dj44"), "kɑːr")
 
     def test_dj44_teacher(self):
-        self.assertEqual(style_word("tˈiːtʃɚ", style="dj44"), "tˈiːtʃər")
+        self.assertEqual(style_word("tˈiːtʃɚ", style="dj44"), "ˈtiːtʃər")
 
     def test_dj44_go(self):
-        self.assertEqual(style_word("ɡˈoʊ", style="dj44"), "gˈoʊ")
+        self.assertEqual(style_word("ɡˈoʊ", style="dj44"), "goʊ")
 
     def test_dj44_coffee_cloth(self):
-        self.assertEqual(style_word("kˈɔfi", style="dj44"), "kˈɔːfi")
+        self.assertEqual(style_word("kˈɔfi", style="dj44"), "ˈkɔːfi")
 
     def test_dj44_tree_no_merge(self):
         # String "trˈiː" is ambiguous (t+r vs atomic tr). Assert merge only
@@ -33,7 +33,8 @@ class TestEnUsStyle(unittest.TestCase):
         )
 
     def test_keep_i_and_stress(self):
-        self.assertEqual(style_word("hˈæpi", style="dj44"), "hˈæpi")
+        # happY keeps i; stress moves to onset (polysyllable).
+        self.assertEqual(style_word("hˈæpi", style="dj44"), "ˈhæpi")
 
 
 if __name__ == "__main__":

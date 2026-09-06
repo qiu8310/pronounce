@@ -2,7 +2,53 @@
 
 from __future__ import annotations
 
+import re
+
 _STRESS = frozenset({"ˈ", "ˌ"})
+
+# Longest-match phone tokenizer (aligned with oral/src/lib/ipa.ts).
+_PHONE_RE = re.compile(
+    r"t͡ʃ|d͡ʒ|tʃ|dʒ|ʧ|ʤ|tr|dr|ts|dz|θ|ð|ʃ|ʒ|ŋ|"
+    r"aɪ|aʊ|eɪ|ɔɪ|əʊ|oʊ|ɪə|iə|eə|ʊə|"
+    r"ɔː|ɑː|uː|iː|ɜː|əː|ˈ|ˌ|.",
+    re.UNICODE,
+)
+
+_CONSONANTS = frozenset(
+    {
+        "p", "b", "t", "d", "k", "g", "ɡ",
+        "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "h",
+        "m", "n", "ŋ", "l", "ɫ", "r", "ɹ", "j", "w",
+        "ʔ", "ʍ", "ɾ",
+        "tʃ", "dʒ", "t͡ʃ", "d͡ʒ", "ʧ", "ʤ",
+        "tr", "dr", "ts", "dz",
+    }
+)
+
+_TWO_ONSETS = frozenset(
+    {
+        "pl", "pr", "pj", "bl", "br", "bj",
+        "tr", "tw", "dr", "dw",
+        "kl", "kr", "kw", "kj", "gl", "gr", "gw", "gj",
+        "fl", "fr", "fj", "θr", "θw", "ʃr", "ʃw",
+        "sp", "st", "sk", "sf", "sm", "sn", "sl", "sw", "sj", "str",
+    }
+)
+
+_THREE_ONSETS = frozenset(
+    {
+        "spl", "spr", "spj", "str", "skw", "skr", "skl", "skj",
+    }
+)
+
+_NUCLEI = frozenset(
+    {
+        "i", "ɪ", "e", "æ", "ɑ", "ɒ", "ɔ", "ʊ", "u", "ʌ", "ə", "ɜ", "ɛ",
+        "ɐ", "ɝ", "ɚ",
+        "iː", "uː", "ɑː", "ɔː", "ɜː", "əː",
+        "eɪ", "aɪ", "ɔɪ", "əʊ", "oʊ", "aʊ", "ɪə", "eə", "ʊə", "iə",
+    }
+)
 
 _RENAME = str.maketrans(
     {
@@ -11,7 +57,6 @@ _RENAME = str.maketrans(
         "ɛ": "e",
     }
 )
-
 _MERGE_FIRST = frozenset({"t", "d"})
 _MERGE_SECOND = {
     ("t", "ɹ"): "tr",
@@ -23,10 +68,95 @@ _MERGE_SECOND = {
 }
 
 
+def tokenize_ipa(ipa: str) -> list[str]:
+    """Split IPA into phones (digraphs + stress marks as their own tokens)."""
+    if not ipa:
+        return []
+    return _PHONE_RE.findall(ipa)
+
+
+def _is_legal_onset(phones: list[str]) -> bool:
+    if len(phones) == 1:
+        phone = phones[0]
+        return phone in _CONSONANTS and phone != "ŋ"
+    key = "".join(phones)
+    if len(phones) == 2:
+        return key in _TWO_ONSETS
+    if len(phones) == 3:
+        return key in _THREE_ONSETS
+    return False
+
+
+def _onset_of(cons: list[str], *, word_start: bool) -> list[str]:
+    if word_start:
+        return cons
+    for n in range(min(3, len(cons)), 0, -1):
+        onset = cons[-n:]
+        if _is_legal_onset(onset):
+            return onset
+    return cons[-1:]
+
+
+def move_stress(phones: list[str]) -> list[str]:
+    """Move ˈˌ from before the vowel to before the syllable onset (oral/ipa.ts)."""
+    work = list(phones)
+    i = 0
+    while i < len(work):
+        mark = work[i]
+        if mark not in _STRESS:
+            i += 1
+            continue
+        cons: list[str] = []
+        j = i - 1
+        while j >= 0 and work[j] in _CONSONANTS:
+            cons.insert(0, work[j])
+            j -= 1
+        if not cons:
+            i += 1
+            continue
+        onset = _onset_of(cons, word_start=j < 0)
+        if not onset:
+            i += 1
+            continue
+        onset_start = i - len(onset)
+        del work[i]
+        work.insert(onset_start, mark)
+        i = onset_start + len(onset) + 1
+    return work
+
+
+def strip_monosyllable_stress(phones: list[str]) -> list[str]:
+    """Textbook IPA omits stress on monosyllables."""
+    if sum(1 for p in phones if p in _NUCLEI) > 1:
+        return phones
+    return [p for p in phones if p not in _STRESS]
+
+
+def relocate_stress(ipa: str) -> str:
+    """Tokenize → move stress to onset → strip monosyllable stress → join."""
+    phones = tokenize_ipa(ipa)
+    return "".join(strip_monosyllable_stress(move_stress(phones)))
+
+
+def relocate_stress_phones(phones: list[str]) -> list[str]:
+    """Same as :func:`relocate_stress` on an already-tokenized (or mixed) list.
+
+    Tokens that still embed stress glyphs are re-tokenized first.
+    """
+    flat: list[str] = []
+    for p in phones:
+        if not p:
+            continue
+        if any(c in _STRESS for c in p) and p not in _STRESS:
+            flat.extend(tokenize_ipa(p))
+        else:
+            flat.append(p)
+    return strip_monosyllable_stress(move_stress(flat))
+
+
 def rename_glyphs(s: str) -> str:
     """1:1 glyph renames: ``ɡ→g``, ``ɹ→r``, ``ɛ→e``."""
     return s.translate(_RENAME)
-
 
 def open_schwa(s: str) -> str:
     """Open near-close central ``ɐ`` to schwa ``ə``."""

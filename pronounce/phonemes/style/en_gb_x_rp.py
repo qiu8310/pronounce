@@ -14,7 +14,7 @@ def style_word(ipa: str, *, style: str) -> str:
     s = h.rename_glyphs(h.open_schwa(h.split_clusters(_rp_pre(ipa))))
     if style == "dj48":
         s = h.merge_dj48(s)
-    return s
+    return h.relocate_stress(s)
 
 
 def style_phones(phones: list[str], *, style: str) -> list[str]:
@@ -23,4 +23,4 @@ def style_phones(phones: list[str], *, style: str) -> list[str]:
         out.extend(h.map_shared_phone(_rp_pre(p)))
     if style == "dj48":
         out = h.merge_dj48_phones(out)
-    return out
+    return h.relocate_stress_phones(out)

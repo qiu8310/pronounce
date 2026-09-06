@@ -490,7 +490,7 @@ Three separate pipelines — US, GB, and RP rules are not mixed.
 - **`iə→ɪə`** where needed; **no** TRAP `a→æ` (BATH `ɑː` comes from the RP voice).
 - No US flap/rhotic/CLOTH-short maps.
 
-All three share helpers: stress kept; `ɐ→ə`; glyph renames (`ɡ→g`, `ɹ→r`, `ɛ→e`, …); cluster splits; unmappable symbols left raw.
+All three share helpers: stress kept then **relocated** like oral textbook IPA (move `ˈ`/`ˌ` to before the syllable onset; strip stress on monosyllables); `ɐ→ə`; glyph renames (`ɡ→g`, `ɹ→r`, `ɛ→e`, …); cluster splits; unmappable symbols left raw.
 
 ### Score display vs `_PHONE_FOLD`
 

@@ -33,7 +33,7 @@ def style_word(ipa: str, *, style: str) -> str:
     s = _shared(_us_pre(ipa))
     if style == "dj48":
         s = h.merge_dj48(s)
-    return s
+    return h.relocate_stress(s)
 
 
 def _core(p: str) -> str:
@@ -58,4 +58,4 @@ def style_phones(phones: list[str], *, style: str) -> list[str]:
         out.extend(_map_us_phone(p))
     if style == "dj48":
         out = h.merge_dj48_phones(out)
-    return out
+    return h.relocate_stress_phones(out)

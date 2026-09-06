@@ -6,17 +6,18 @@ from pronounce.phonemes.style.en_gb import style_word
 
 class TestEnGbStyle(unittest.TestCase):
     def test_trap_a_to_ae(self):
-        self.assertEqual(style_word("bˈaθ", style="dj44"), "bˈæθ")
+        self.assertEqual(style_word("bˈaθ", style="dj44"), "bæθ")
 
     def test_no_us_cloth_rule(self):
         # If short ɔ ever appeared, GB pipeline must not map it; use a synthetic input
-        self.assertEqual(style_word("kˈɔf", style="dj44"), "kˈɔf")
+        self.assertEqual(style_word("kˈɔf", style="dj44"), "kɔf")
 
     def test_no_flap_rule(self):
-        self.assertEqual(style_word("sˈɪɾi", style="dj44"), "sˈɪɾi")
+        self.assertEqual(style_word("sˈɪɾi", style="dj44"), "ˈsɪɾi")
 
     def test_ie_to_ie(self):
-        self.assertEqual(style_word("ˈiə", style="dj44"), "ˈɪə")
+        # Monosyllable NEAR: stress stripped after iə→ɪə.
+        self.assertEqual(style_word("ˈiə", style="dj44"), "ɪə")
 
     def test_merge_only_dj48(self):
         self.assertEqual(
