@@ -26,11 +26,14 @@ Not exposed: `score acoustic`, `tts-zh`, `--calibration`. Unknown path: `404` `{
 
 | Field | Required | Meaning |
 |-------|----------|---------|
-| `out` | yes | Output wav path |
+| `out` | if no `play` | Output wav path. Empty/null/omit = no file |
+| `play` | if no `out` | JSON `true` = play from the serve process (blocks until done). Omit/`false` = don’t play |
 | `text` | if no `ipa` | Sentence for Kokoro |
 | `ipa` | if no `text` | One Unicode IPA phone (e.g. `"ɪ"`). Speaks with espeak-ng, not Kokoro. Same as CLI `--ipa` |
 | `voice` | no | Kokoro voice (default `af_heart`). Ignored when `ipa` is set |
 | `lang` | no | `en-us` / `en-gb` / `en-gb-x-rp`. Default `en-gb` when `ipa` is set, else `en-us` |
+
+At least one of non-empty `out` or `play: true`.
 
 `POST /score` (phoneme engine only):
 
@@ -66,6 +69,7 @@ Same keys as CLI [`tts`](#tts), with:
   "voice": "espeak",
   "lang": "en-gb",
   "out": "/abs/path/ih-en-gb.wav",
+  "played": false,
   "speed": 1.0,
   "sample_rate": 22050,
   "native_rate": 22050,
@@ -400,7 +404,8 @@ Acoustic score without `--ref` synthesizes a native-speed Kokoro wav, sets `ref_
 | `text` | string | `--text` (word, sentence, or paragraph) |
 | `voice` | string | `--voice` (default `af_heart`). Isolated-phone TTS: `"espeak"` |
 | `lang` | string | `--lang` (`en-us` / `en-gb`). Isolated-phone TTS defaults to `en-gb` |
-| `out` | string | Absolute `--out` path |
+| `out` | string \| null | Absolute `--out` path, or `null` when no file was written |
+| `played` | bool | `true` after in-process playback (`--play` / HTTP `"play": true`) |
 | `speed` | number | Playback tempo (`1` = native; `0.8` = slower). Isolated-phone TTS: always `1.0` |
 | `sample_rate` | number | Wav header rate (`native_rate * speed` for Kokoro) |
 | `native_rate` | number | `24000` for Kokoro. Isolated-phone TTS: `22050` |
@@ -419,7 +424,8 @@ Chinese TTS via MeloTTS. Separate subcommand from English `tts` (not `--lang zh`
 | `text` | string | `--text` |
 | `speaker` | `"ZH"` | Only speaker in MeloTTS-Chinese |
 | `lang` | `"zh"` | Always Chinese |
-| `out` | string | Absolute `--out` path |
+| `out` | string \| null | Absolute `--out` path, or `null` when no file was written |
+| `played` | bool | `true` after in-process playback (`--play`) |
 | `speed` | number | Playback tempo (`1` = native; `0.8` = slower) |
 | `sample_rate` | number | Wav header rate (`native_rate * speed`) |
 | `native_rate` | number | Always `44100` |

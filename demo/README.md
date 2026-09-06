@@ -30,6 +30,7 @@ DEMO="$MODELS_HOME/pronounce/demo"
 "$PY" -m pronounce tts --text "Hello" --out "$DEMO/hello-en-gb.wav" --voice bf_emma --lang en-gb
 # 慢放：写出的 wav 采样率按 --speed 降低（0.8 = 磁带减速）
 "$PY" -m pronounce tts --text "Hello" --out /tmp/hello-slow.wav --voice af_heart --lang en-us --speed 0.8
+"$PY" -m pronounce tts --text "Hello" --play --voice af_heart --lang en-us
 ```
 
 ## 孤立音素（`--ipa`）
@@ -55,6 +56,7 @@ Kokoro 不能念 IPA；把 `ɪ` 当 `--text` 还会被 G2P 读成字母名。`--
 ```bash
 "$PY" -m pronounce tts-zh --text "你好，今天天气怎么样？" --out /tmp/nihao.wav
 "$PY" -m pronounce tts-zh --text "你好" --out /tmp/nihao-slow.wav --speed 0.8
+"$PY" -m pronounce tts-zh --text "你好" --play
 ```
 
 ## 音素打分
@@ -97,6 +99,10 @@ curl -sS -X POST http://127.0.0.1:8787/phonemes \
 curl -sS -X POST http://127.0.0.1:8787/tts \
   -H 'Content-Type: application/json' \
   -d "{\"text\":\"Hello\",\"out\":\"$DEMO/hello-en-us.wav\",\"voice\":\"af_heart\",\"lang\":\"en-us\"}"
+
+curl -sS -X POST http://127.0.0.1:8787/tts \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Hello","play":true}'
 
 curl -sS -X POST http://127.0.0.1:8787/score \
   -H 'Content-Type: application/json' \
