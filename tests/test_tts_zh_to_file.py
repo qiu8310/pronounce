@@ -48,6 +48,16 @@ class TestTtsZhToFile(unittest.TestCase):
             self.assertTrue(payload["played"])
             play.assert_called_once()
 
+    @patch("pronounce.tts_zh.play_audio", side_effect=RuntimeError("no device"))
+    @patch("pronounce.tts_zh.synthesize", return_value=np.zeros(8, dtype=np.float32))
+    def test_play_failure_after_write_keeps_wav(self, synth, play):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "zh.wav"
+            with self.assertRaises(RuntimeError) as ctx:
+                to_file(text="你好", out=str(path), play=True)
+            self.assertEqual(str(ctx.exception), "no device")
+            self.assertTrue(path.is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

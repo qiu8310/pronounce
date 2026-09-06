@@ -115,7 +115,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    """合成并写 wav，stdout 打 JSON。"""
+    """合成并可选写 wav / 播放，stdout 打 JSON。"""
     try:
         print(
             json.dumps(

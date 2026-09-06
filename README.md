@@ -47,7 +47,7 @@ Resident HTTP (loopback only): see [Serve](#serve). Isolated phones use `--ipa` 
 | `--ipa` | Isolated IPA phone (`tts` and `score phoneme`). Speaks with espeak-ng; scoring skips G2P |
 | `--user` | User take wav (score) |
 | `--ref` | Reference wav. Optional for phoneme. Optional for acoustic: if omitted, Kokoro synthesizes one (`ref_generated`) |
-| `--out` | Optional output wav path (`tts` / `tts-zh`). Empty omit = no file |
+| `--out` | Optional output wav path (`tts` / `tts-zh`). Omit `--out` to skip writing a file |
 | `--play` | In-process playback (no temp file). Need at least one of `--out` or `--play` |
 | `--voice` | Kokoro voice id, default `af_heart` (`tts`; acoustic auto-ref) |
 | `--speed` | Listen tempo for `tts` / `tts-zh`, default `1`. `0.8` is slower |
