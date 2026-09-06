@@ -18,6 +18,24 @@ class TestIpaForText(unittest.TestCase):
         self.assertNotIn("O", out["ipa"])
         self.assertIn("oʊ", out["ipa"] + "".join(w["ipa"] for w in out["words"]))
 
+    def test_style_none_matches_raw(self):
+        raw = ipa_for_text("tree", lang="en-us", style="none")
+        omitted = ipa_for_text("tree", lang="en-us")
+        self.assertEqual(raw, omitted)
+
+    def test_style_dj48_tree_en_us(self):
+        out = ipa_for_text("tree", lang="en-us", style="dj48")
+        self.assertIn("tr", out["words"][0]["ipa"])
+
+    def test_style_dj48_rejects_es(self):
+        with self.assertRaises(ValueError):
+            ipa_for_text("hola", lang="es", style="dj48")
+
+    def test_en_gb_x_rp_phonemizes(self):
+        out = ipa_for_text("bath", lang="en-gb-x-rp")
+        self.assertTrue(out["ipa"])
+        self.assertEqual(out["words"][0]["word"], "bath")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,15 +15,23 @@ Shared interpreter with mimora: `$MODELS_HOME/.venv` (Python 3.12). `mimora/.ven
 ## Usage
 
 ```bash
-"$MODELS_HOME/.venv/bin/python" -m pronounce score phoneme --text "..." --user take.wav [--ref ref.wav] [--lang en-us] [--device cpu] [--calibration cal.json]
+"$MODELS_HOME/.venv/bin/python" -m pronounce score phoneme --text "..." --user take.wav [--ref ref.wav] [--lang en-us] [--style none|dj44|dj48] [--device cpu] [--calibration cal.json]
 "$MODELS_HOME/.venv/bin/python" -m pronounce score phoneme --ipa ɪ --user take.wav [--ref ref.wav] [--lang en-gb]
 "$MODELS_HOME/.venv/bin/python" -m pronounce score acoustic --text "..." --user take.wav [--ref actor.wav] [--voice af_heart] [--device cpu]
 "$MODELS_HOME/.venv/bin/python" -m pronounce tts --text "Hello." --out /tmp/hello.wav [--voice af_heart] [--lang en-us] [--speed 0.8]
 "$MODELS_HOME/.venv/bin/python" -m pronounce tts --ipa ɪ --out /tmp/ih.wav [--lang en-gb]
 "$MODELS_HOME/.venv/bin/python" -m pronounce tts-zh --text "你好。" --out /tmp/nihao.wav [--device cpu] [--speed 0.8]
-"$MODELS_HOME/.venv/bin/python" -m pronounce phonemes --text "Hello, how are you?" [--lang en-us]
+"$MODELS_HOME/.venv/bin/python" -m pronounce phonemes --text "Hello, how are you?" [--lang en-us] [--style none|dj44|dj48]
 "$MODELS_HOME/.venv/bin/python" -m pronounce schema
 "$MODELS_HOME/.venv/bin/python" -m pronounce serve --port 8787
+```
+
+DJ display-style examples (`phonemes` and `score phoneme`; field contract in [`FIELDS.md`](FIELDS.md#display-style-style)):
+
+```bash
+"$MODELS_HOME/.venv/bin/python" -m pronounce phonemes --text "tree coffee city" --lang en-us --style dj48
+"$MODELS_HOME/.venv/bin/python" -m pronounce phonemes --text "bath hour" --lang en-gb-x-rp --style dj44
+"$MODELS_HOME/.venv/bin/python" -m pronounce score phoneme --text "tree" --user take.wav --lang en-us --style dj48
 ```
 
 Copy-paste examples with the sample wavs in [`demo/`](demo/README.md) (CLI and `serve`).
@@ -39,12 +47,17 @@ Resident HTTP (loopback only): see [Serve](#serve). Isolated phones use `--ipa` 
 | `--out` | Output wav path (`tts` / `tts-zh`) |
 | `--voice` | Kokoro voice id, default `af_heart` (`tts`; acoustic auto-ref) |
 | `--speed` | Listen tempo for `tts` / `tts-zh`, default `1`. `0.8` is slower |
-| `--lang` | `en-us` / `en-gb` (`tts` and score; Chinese TTS is `tts-zh`, not `--lang zh`) |
+| `--lang` | `en-us` / `en-gb` / `en-gb-x-rp` (`tts` and score; Chinese TTS is `tts-zh`, not `--lang zh`) |
+| `--style` | Display rewrite for `phonemes` and `score phoneme`: `none` (default) / `dj44` / `dj48`. Textbook DJ symbols; does not change scoring math. Requires an English `lang` when not `none`. See [`FIELDS.md`](FIELDS.md#display-style-style) |
 | `--device` | `cpu` or `cuda`, default `cpu` |
 | `--calibration` | Per-user `calibration.json` (score) |
 | `--user-name` | Name stored with that calibration (score) |
 
 `--text` may be a paragraph. Dictionary IPA (`phonemes`) is one row per whitespace token. Sentence TTS concatenates Kokoro chunks. Isolated-phone TTS (`--ipa` / HTTP `"ipa"`) is one espeak-ng phone, not Kokoro. Scoring still works best on a short take that matches the text (or a single `--ipa`).
+
+### Display style (`--style`)
+
+Optional China-textbook DJ rewrite on `phonemes` and `score phoneme` (CLI + serve). `none` or omit = raw espeak IPA. `dj44` = glyph renames without cluster merges; `dj48` adds same-word `tr` / `dr` / `ts` / `dz` merges. Three separate per-lang pipelines — US (`ɾ→t`, rhotic splits, `oʊ→əʊ`, short `ɔ→ɔː`, `ɑː` LOT∪PALM), GB (TRAP `a→æ`, BATH often short), RP (`en-gb-x-rp`, BATH `ɑː` from G2P). Score grades and `_PHONE_FOLD` alignment are unchanged; only `ipa_words` display (and `phonemes` IPA strings) are styled. Details: [`FIELDS.md`](FIELDS.md#display-style-style).
 
 ## Model paths
 

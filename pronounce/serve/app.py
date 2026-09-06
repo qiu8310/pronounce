@@ -99,9 +99,11 @@ class RepeatHandler(BaseHTTPRequestHandler):
                         )
                     )
                     return
+                style = data.get("style")
                 result = engines.dictionary_ipa(
                     text=str(text),
                     lang=str(data.get("lang") or "en-us"),
+                    style=str(style) if style is not None else None,
                 )
                 self._send(200, result)
                 return
@@ -126,6 +128,7 @@ class RepeatHandler(BaseHTTPRequestHandler):
                 lang=str(data.get("lang") or "en-us"),
                 device=str(data.get("device") or "cpu"),
                 ipa=str(ipa) if ipa else None,
+                style=str(data["style"]) if data.get("style") else None,
             )
             self._send(200, result)
         except (FileNotFoundError, ValueError) as e:

@@ -30,7 +30,7 @@ Not exposed: `score acoustic`, `tts-zh`, `--calibration`. Unknown path: `404` `{
 | `text` | if no `ipa` | Sentence for Kokoro |
 | `ipa` | if no `text` | One Unicode IPA phone (e.g. `"ɪ"`). Speaks with espeak-ng, not Kokoro. Same as CLI `--ipa` |
 | `voice` | no | Kokoro voice (default `af_heart`). Ignored when `ipa` is set |
-| `lang` | no | `en-us` / `en-gb`. Default `en-gb` when `ipa` is set, else `en-us` |
+| `lang` | no | `en-us` / `en-gb` / `en-gb-x-rp`. Default `en-gb` when `ipa` is set, else `en-us` |
 
 `POST /score` (phoneme engine only):
 
@@ -40,10 +40,11 @@ Not exposed: `score acoustic`, `tts-zh`, `--calibration`. Unknown path: `404` `{
 | `ipa` | if no `text` | When set, expected phones are this IPA (after normalize); G2P from `text` is skipped. Same as CLI `--ipa` |
 | `user_wav` | yes | User take |
 | `ref_wav` | yes | Reference wav |
-| `lang` | no | Default `en-us` |
+| `lang` | no | Default `en-us` (`en-us` / `en-gb` / `en-gb-x-rp`) |
+| `style` | no | Display rewrite for `ipa_words`: `none` / `dj44` / `dj48`. Default `none`. See [Display style](#display-style-style) |
 | `device` | no | Default `cpu` |
 
-`POST /phonemes`: `{ "text", "lang"? }` — same as CLI `phonemes`.
+`POST /phonemes`: `{ "text", "lang"?, "style"? }` — same as CLI `phonemes`.
 
 ### Isolated-phone TTS response
 
@@ -81,6 +82,7 @@ Same keys as CLI [`tts`](#tts), with:
 | `text` | string | never | `--text` value |
 | `user_wav` | string | never | Absolute `--user` path |
 | `ref_wav` | string \| null | `null` when `--ref` omitted | Absolute `--ref` path |
+| `style` | string | omitted when flag not passed | Phoneme engine only: `none` / `dj44` / `dj48`. Echoed when CLI `--style` or HTTP `"style"` is present (including explicit `none`); omitted when the flag is omitted. See [Display style](#display-style-style) |
 | `score` | number | never | 0–100 overall pronunciation score |
 | `passed` | bool | never | Engine pass/fail |
 | `scored` | bool | never | Always `true` for phoneme/acoustic |
@@ -216,6 +218,8 @@ Per whitespace token, word-local phone alignment for the IPA diagnosis panel:
 | `ok` | bool[] | Per-phone match flags |
 | `start_sec` | number \| null | Start into prepared user waveform, or null when untimed |
 | `end_sec` | number \| null | End into prepared user waveform, or null when untimed |
+
+With `--style none` (default), `expected` uses pre-fold reference symbols and `heard` uses folded recognizer phones (same as today). With `dj44` / `dj48`, `expected` and `heard` are rewritten for display via the same pipeline as `phonemes`; `ok` stays from alignment on folded phones (adjacent display phones merge in lockstep under `dj48`). Alignment, `_PHONE_FOLD`, distance, and `score` are unchanged — see [Display style](#display-style-style).
 
 Acoustic leaves `ipa_words` unused (`phoneme` is `{}`).
 
@@ -431,6 +435,61 @@ Dictionary IPA for people to read (espeak-ng, stress kept). One `words[]` row pe
 | `ok` | bool | `true` |
 | `command` | `"phonemes"` | Which subcommand ran |
 | `text` | string | `--text` |
-| `lang` | string | `--lang` |
-| `ipa` | string | Space-joined IPA for the whole text |
+| `lang` | string | `--lang` (`en-us` / `en-gb` / `en-gb-x-rp`) |
+| `style` | string | `--style` (`none` / `dj44` / `dj48`; always echoed) |
+| `ipa` | string | Space-joined IPA for the whole text (after style rewrite when not `none`) |
 | `words` | object[] | `{"word", "ipa"}` per `text.split()` token |
+
+## Display style (`style`)
+
+Optional **display rewrite** so espeak IPA can match China-textbook DJ symbols. Applies to `phonemes` and `score phoneme` (CLI + serve). Does **not** change G2P, alignment, `_PHONE_FOLD`, calibration, or grade formulas.
+
+| Value | Meaning |
+|-------|---------|
+| `none` | No rewrite — raw espeak IPA (default when flag omitted) |
+| `dj44` | Textbook glyph renames and splits, **without** `tr` / `dr` / `ts` / `dz` merges |
+| `dj48` | Same as `dj44`, plus same-word cluster merges (`t+ɹ→tr`, `d+ɹ→dr`, `t+s→ts`, `d+z→dz`) |
+
+`dj44` / `dj48` require `lang` in `en-us` / `en-gb` / `en-gb-x-rp`; other langs error (`ok: false`). `none` (or omitting the flag) on any lang is fine.
+
+### Lang (G2P)
+
+| `--lang` | espeak voice | Notes |
+|----------|--------------|-------|
+| `en-us` | `gmw/en-US` | Default for most commands |
+| `en-gb` | `gmw/en` | General GB; not RP |
+| `en-gb-x-rp` | `gmw/en-GB-x-rp` | RP lexical sets (e.g. BATH `ɑː`) from G2P |
+
+### Per-lang style caveats
+
+Three separate pipelines — US, GB, and RP rules are not mixed.
+
+**`en-us`** (US-only maps; not applied on GB/RP):
+
+- Flap **`ɾ→t`** (lossy; espeak US uses `ɾ` for underlying `/t/` — e.g. *city*; does not distinguish *latter* vs *ladder*).
+- Rhotic splits to teaching **`V+r`** (`ɚ→ər`, `ɝ→ɜːr`, `ɑːɹ→ɑːr`, …).
+- **`oʊ→əʊ`**; short CLOTH **`ɔ→ɔː`** (not already-long `ɔː` or CHOICE `ɔɪ`).
+- Keeps US **`ɑː`** for LOT∪PALM; does not invent `ɒ`.
+
+**`en-gb`** (GB-only; no US flap/rhotic/`oʊ`/`ɔ→ɔː`):
+
+- TRAP **`a→æ`** (not PRICE `aɪ`, MOUTH `aʊ`, or PALM/START `ɑ`/`ɑː`).
+- **`iə→ɪə`** and other GB glyph fixes.
+- BATH often stays short (`a→æ`), **not** RP `ɑː`.
+
+**`en-gb-x-rp`** (RP lexical sets from G2P, not copied US tables):
+
+- **`iə→ɪə`** where needed; **no** TRAP `a→æ` (BATH `ɑː` comes from the RP voice).
+- No US flap/rhotic/CLOTH-short maps.
+
+All three share helpers: stress kept; `ɐ→ə`; glyph renames (`ɡ→g`, `ɹ→r`, `ɛ→e`, …); cluster splits; unmappable symbols left raw.
+
+### Score display vs `_PHONE_FOLD`
+
+| Layer | Behavior |
+|-------|----------|
+| Alignment / grade | Unchanged — `_normalize_phones` / `_PHONE_FOLD` (e.g. `æ→a`, `ɾ→r`, `ɹ→r`) |
+| `ipa_words.expected` / `heard` | Same `apply_style` as `phonemes` for request `lang`+`style`; expected uses pre-fold symbols so `æ` / `ɐ` are not lost before styling |
+| `ipa_words.ok` | From folded alignment; under `dj48`, merged adjacent display phones merge `ok` in lockstep |
+| `expected_phonemes` / `transcribed_phonemes` | Folded sequences as today (not styled) |
+| `score` / `passed` | Unchanged when toggling `style` on the same take |

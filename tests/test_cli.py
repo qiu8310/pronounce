@@ -166,6 +166,30 @@ class TestCliGuards(unittest.TestCase):
         self.assertGreater(len(data["words"]), 1)
         self.assertIn("oʊ", data["ipa"] + "".join(w["ipa"] for w in data["words"]))
         self.assertNotIn("O", data["ipa"])
+        self.assertEqual(data["style"], "none")
+
+    def test_phonemes_style_dj48_echoes_and_merges_tr(self):
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["phonemes", "--text", "tree", "--lang", "en-us", "--style", "dj48"])
+        self.assertEqual(code, 0)
+        data = json.loads(buf.getvalue())
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["style"], "dj48")
+        self.assertIn("tr", data["words"][0]["ipa"])
+
+    def test_phonemes_style_dj48_rejects_es(self):
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main(["phonemes", "--text", "hola", "--lang", "es", "--style", "dj48"])
+        self.assertEqual(code, 1)
+        data = json.loads(buf.getvalue())
+        self.assertFalse(data["ok"])
+        self.assertIn("error", data)
+        self.assertNotIn("unrecognized", data["error"].lower())
+        self.assertIn("style", data["error"].lower())
 
     def test_tts_rejects_invalid_speed(self):
         """speed=0 非法，错误信息应提到 speed，而不是 unrecognized argument。"""

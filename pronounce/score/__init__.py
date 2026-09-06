@@ -31,6 +31,11 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         help="Kokoro voice when --ref is omitted (acoustic)",
     )
     score.add_argument("--calibration", default=None, help="per-user calibration.json")
+    score.add_argument(
+        "--style",
+        default=None,
+        help="display style for ipa_words: none | dj44 | dj48 (phoneme engine)",
+    )
     # dest="user_name"：命令行是 --user-name，Python 里属性名不能带连字符。
     score.add_argument("--user-name", default="", dest="user_name")
     score.set_defaults(func=run)
@@ -120,6 +125,7 @@ def run(args: argparse.Namespace) -> int:
                 ipa=args.ipa,
                 calibration=args.calibration,
                 user_name=args.user_name or "",
+                style=args.style,
             )
             print(json.dumps(payload))
             return 0

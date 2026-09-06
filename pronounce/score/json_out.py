@@ -17,11 +17,14 @@ def to_payload(
     user_wav: str,
     ref_wav: str | None,
     prosody: dict | None = None,
+    style: str | None = None,
 ) -> dict:
     """组装成功响应。
 
     参数列表里单独的 ``*`` 表示后面全是「仅关键字」参数：
     必须写 ``to_payload(engine=..., result=...)``，不能按位置传，避免字段对错位。
+    ``style``：展示样式（``none`` / ``dj44`` / ``dj48``）；``None`` 表示未传，
+    不进 payload（与今日一致）。非 None 时在顶层 echo（含显式 ``none``）。
     """
     phoneme: dict
     acoustic: dict
@@ -72,4 +75,5 @@ def to_payload(
         "prosody": dict(prosody) if prosody else {},
         "phoneme": phoneme,
         "acoustic": acoustic,
+        **({"style": style} if style is not None else {}),
     }

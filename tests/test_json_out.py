@@ -74,6 +74,36 @@ class TestToPayload(unittest.TestCase):
         self.assertEqual(d["acoustic"]["acoustic_per_step"], 0.2)
         self.assertEqual(d["phoneme"], {})
 
+    def test_style_omitted_not_echoed(self):
+        r = PronunciationResult(
+            score=80.0, word_errors=[], prosody={}, transcription="hello",
+            passed=True, bucket=4, grade="4", ipa_words=[],
+        )
+        d = to_payload(engine="phoneme", result=r, text="hello", user_wav="/u.wav", ref_wav=None)
+        self.assertNotIn("style", d)
+
+    def test_style_explicit_none_echoed(self):
+        r = PronunciationResult(
+            score=80.0, word_errors=[], prosody={}, transcription="hello",
+            passed=True, bucket=4, grade="4", ipa_words=[],
+        )
+        d = to_payload(
+            engine="phoneme", result=r, text="hello", user_wav="/u.wav",
+            ref_wav=None, style="none",
+        )
+        self.assertEqual(d["style"], "none")
+
+    def test_style_dj48_echoed(self):
+        r = PronunciationResult(
+            score=80.0, word_errors=[], prosody={}, transcription="hello",
+            passed=True, bucket=4, grade="4", ipa_words=[],
+        )
+        d = to_payload(
+            engine="phoneme", result=r, text="hello", user_wav="/u.wav",
+            ref_wav=None, style="dj48",
+        )
+        self.assertEqual(d["style"], "dj48")
+
 
 if __name__ == "__main__":
     unittest.main()

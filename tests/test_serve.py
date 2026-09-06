@@ -127,6 +127,30 @@ class TestServeEnginesMocked(unittest.TestCase):
         status, data = self._post("/phonemes", {"text": "Hello"})
         self.assertEqual(status, 200)
         self.assertEqual(data["command"], "phonemes")
+        ipa.assert_called_once()
+        self.assertEqual(ipa.call_args.kwargs["text"], "Hello")
+        self.assertEqual(ipa.call_args.kwargs["lang"], "en-us")
+        self.assertIsNone(ipa.call_args.kwargs["style"])
+
+    @patch("pronounce.serve.engines.dictionary_ipa")
+    def test_phonemes_forwards_style(self, ipa):
+        ipa.return_value = {
+            "ok": True,
+            "command": "phonemes",
+            "text": "tree",
+            "lang": "en-us",
+            "style": "dj48",
+            "ipa": "triː",
+            "words": [{"word": "tree", "ipa": "triː"}],
+        }
+        status, data = self._post(
+            "/phonemes",
+            {"text": "tree", "lang": "en-us", "style": "dj48"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(data["style"], "dj48")
+        ipa.assert_called_once()
+        self.assertEqual(ipa.call_args.kwargs["style"], "dj48")
 
     @patch("pronounce.serve.engines.score_phoneme")
     def test_score_ok(self, score):

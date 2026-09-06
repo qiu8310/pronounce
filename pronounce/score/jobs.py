@@ -17,6 +17,7 @@ def score_phoneme(
     ipa: str | None = None,
     calibration: str | Path | None = None,
     user_name: str = "",
+    style: str | None = None,
 ) -> dict:
     """读 wav、跑 phoneme ``analyze``，返回与 CLI / HTTP ``score`` 相同的成功 JSON。"""
     from pronounce.common.audio import TARGET_SAMPLE_RATE, prepare_waveform
@@ -28,6 +29,16 @@ def score_phoneme(
     text = (text or "").strip() or (f"/{ipa}/" if ipa else "")
     if not text:
         raise ValueError("text or ipa is required")
+
+    # 展示样式：早校验（在加载模型前），与 phonemes 一致。
+    # normalize_style 抛 ValueError（非法值）；非 en-* 配 dj44/dj48 也抛。
+    from pronounce.phonemes.style import STYLE_LANGS, normalize_style
+
+    style_norm = normalize_style(style)
+    if style_norm != "none" and lang not in STYLE_LANGS:
+        raise ValueError(
+            f"style {style_norm!r} requires lang in {sorted(STYLE_LANGS)}, got {lang!r}"
+        )
 
     user_path = Path(user_wav).expanduser().resolve()
     ref_path = Path(ref_wav).expanduser().resolve() if ref_wav else None
@@ -63,6 +74,7 @@ def score_phoneme(
         user_sr=TARGET_SAMPLE_RATE,
         reference_sr=TARGET_SAMPLE_RATE,
         expected_ipa=ipa,
+        style=style_norm,
     )
     if reference_audio is not None:
         contours = compute_prosody(
@@ -77,4 +89,7 @@ def score_phoneme(
         user_wav=str(user_path),
         ref_wav=str(ref_path) if ref_path is not None else None,
         prosody=contours,
+        # Echo style only when the caller passed a flag (including explicit
+        # "none"/""). Omitted (None) -> no key, preserving today's envelope.
+        style=style_norm if style is not None else None,
     )

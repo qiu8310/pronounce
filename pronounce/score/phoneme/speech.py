@@ -620,6 +620,37 @@ def reference_phonemes(text: str, espeak_lang: str) -> list[str]:
     """
     return [p for word in reference_word_phonemes(text, espeak_lang) for p in word]
 
+def reference_word_phonemes_raw(text: str, espeak_lang: str) -> list[list[str]]:
+    """按词分组的**未折叠**音素（保留 ``ː`` / ``æ`` / ``ɐ`` / ``ɹ`` 等）。
+
+    与 :func:`reference_word_phonemes` 同一套 espeak 调用，但不经过
+    ``_normalize_phones``（不去变音符号、不折叠清单），供展示层 ``apply_style_phones``
+    使用——这样 ``æ`` / ``ɐ`` 不会先被 ``_PHONE_FOLD`` 抹成 ``a`` 再被加回。
+
+    返回：``list[list[str]]``，外层与 ``text.split()`` 1:1。
+    """
+    tokens = text.split()
+    if not tokens:
+        return []
+
+    from phonemizer import phonemize
+    from phonemizer.separator import Separator
+
+    ensure_espeak()
+    ipa_list = phonemize(
+        tokens,
+        language=espeak_lang,
+        backend="espeak",
+        strip=True,
+        with_stress=False,
+        preserve_punctuation=False,
+        separator=Separator(phone=" ", word="", syllable=""),
+    )
+    if isinstance(ipa_list, str):
+        ipa_list = [ipa_list]
+    return [_tokenize_ipa(ipa) for ipa in ipa_list]
+
+
 def reference_word_phonemes(text: str, espeak_lang: str) -> list[list[str]]:
     """把 ``text`` 按空白切成词，每个词一组音素，顺序与词一致。
 
@@ -1132,6 +1163,128 @@ def build_ipa_words(tokens: list[str],
         })
     return out
 
+
+# =====================================================================
+# 展示层样式（dj44 / dj48）——只改 ipa_words 的 expected / heard / ok 显示，
+# 不动 _PHONE_FOLD / 对齐 / 分数。详见 docs/superpowers/specs/...-design.md。
+# =====================================================================
+# dj48 合并的相邻音素对（与 helpers._MERGE_SECOND 对齐；这里只看 core 音素）。
+_LOCKSTEP_MERGE = {
+    ("t", "r"): "tr",
+    ("t", "s"): "ts",
+    ("d", "r"): "dr",
+    ("d", "z"): "dz",
+}
+
+
+def _phone_core(p: str) -> str:
+    """去掉重音标记，返回纯音素（用于判断是否可合并）。"""
+    return "".join(c for c in p if c not in ("ˈ", "ˌ"))
+
+
+def merge_phone_lists_lockstep(
+    expected: list[str],
+    heard: list[str],
+    ok: list[bool],
+) -> tuple[list[str], list[str], list[bool]]:
+    """dj48 合并：以 *expected* 为驱动，lockstep 合并 expected / heard / ok。
+
+    合并规则与 :func:`pronounce.phonemes.style.helpers.merge_dj48_phones` 一致：
+    相邻 ``t+r→tr`` / ``d+r→dr`` / ``t+s→ts`` / ``d+z→dz``（core 音素匹配）。
+    三条列表在同一位置同时合并：
+
+    * expected / heard：相邻两 token 字符串拼接（保留重音）。
+    * ok：``ok_i and ok_{i+1}``（两个都对，合并后才算对）。
+
+    驱动用 expected 的 core 音素判断是否合并；heard 即使音素不同也按相同位置
+    合并，保证三条列表始终等长、对齐。列表长度不一致时按 expected 长度截断/补齐。
+    """
+    n = min(len(expected), len(heard), len(ok))
+    exp = list(expected[:n])
+    hd = list(heard[:n])
+    okf = list(ok[:n])
+    if not exp:
+        return [], [], []
+
+    out_exp: list[str] = []
+    out_heard: list[str] = []
+    out_ok: list[bool] = []
+    i = 0
+    while i < len(exp):
+        if i + 1 < len(exp):
+            pair = (_phone_core(exp[i]), _phone_core(exp[i + 1]))
+            if pair in _LOCKSTEP_MERGE:
+                out_exp.append(exp[i] + exp[i + 1])
+                out_heard.append(hd[i] + hd[i + 1])
+                out_ok.append(bool(okf[i] and okf[i + 1]))
+                i += 2
+                continue
+        out_exp.append(exp[i])
+        out_heard.append(hd[i])
+        out_ok.append(bool(okf[i]))
+        i += 1
+    return out_exp, out_heard, out_ok
+
+
+def style_ipa_word_entry(
+    *,
+    expected_raw: list[str],
+    heard_folded: list[str],
+    ok_folded: list[bool],
+    lang: str,
+    style: str | None,
+) -> tuple[list[str], list[str], list[bool]]:
+    """对单个 ipa_word 的 expected / heard / ok 做展示样式改写。
+
+    参数：
+        expected_raw: 该词**未折叠**的参考音素（保留 ``æ`` / ``ɐ`` / ``ɹ`` / ``ː``）。
+        heard_folded: 该词**已折叠**的识别音素（来自 ``build_ipa_words``）。
+        ok_folded: 与 ``heard_folded`` 等长的对齐正确旗标。
+        lang: 请求的 espeak 语言（``en-us`` / ``en-gb`` / ``en-gb-x-rp``）。
+        style: ``none`` / ``dj44`` / ``dj48``。
+
+    返回：(expected, heard, ok) 三条等长列表。
+
+    * ``style=none``：原样返回（expected 用 raw，heard 用 folded，ok 不变）。
+    * ``dj44``：1:1 改名 + 拆分（无相邻合并）。expected 用 raw 经
+      :func:`apply_style_phones`；heard 逐槽位单独样式（保持与 ok 1:1）。
+      若 expected 因拆分变长，把最后一个 ok 复制到新槽位以保持与 heard 等长
+      （heard 不拆分单音素）。
+    * ``dj48``：先做 dj44 改名，再对三条列表做 :func:`merge_phone_lists_lockstep`
+      相邻合并。
+    """
+    from pronounce.phonemes.style import apply_style_phones, normalize_style
+
+    st = normalize_style(style)
+    if st == "none":
+        return list(expected_raw), list(heard_folded), list(ok_folded)
+
+    # dj44 改名（不含 dj48 合并）：expected 整表样式，heard 逐槽位样式。
+    exp = apply_style_phones(expected_raw, lang=lang, style="dj44")
+    heard = [
+        apply_style_phones([h], lang=lang, style="dj44")[0] if h else ""
+        for h in heard_folded
+    ]
+    ok = list(ok_folded)
+
+    # 拆分可能让 expected 比 heard/ok 长；按 heard 长度对齐 ok（复制末位 ok）。
+    if len(exp) > len(heard):
+        if ok:
+            ok = ok + [ok[-1]] * (len(exp) - len(heard))
+        else:
+            ok = [True] * len(exp)
+        # heard 不拆分单音素，补空串保持等长。
+        heard = heard + [""] * (len(exp) - len(heard))
+    elif len(heard) > len(exp):
+        # heard 比 expected 长（插入音素）：expected 补空串，ok 补 False。
+        exp = exp + [""] * (len(heard) - len(exp))
+        ok = ok + [False] * (len(heard) - len(ok))
+
+    if st == "dj48":
+        exp, heard, ok = merge_phone_lists_lockstep(exp, heard, ok)
+    return exp, heard, ok
+
+
 def _overproduction_penalty(n_reference: int, n_spoken: int) -> float:
     """说出的音素远多于参考时的惩罚，落在 [0, 1]。
 
@@ -1218,7 +1371,8 @@ def analyze(user_audio: np.ndarray,
             reference_sr: int = KOKORO_SAMPLE_RATE,
             voice: str | None = None,
             is_reference: bool = False,
-            expected_ipa: str | None = None) -> PronunciationResult:
+            expected_ipa: str | None = None,
+            style: str | None = None) -> PronunciationResult:
     """在音素层面比较用户朗读与期望句子。
 
     功能：文本经 espeak 得参考音素，用户 wav 经 wav2vec2 得识别音素，再做特征加权
@@ -1232,6 +1386,9 @@ def analyze(user_audio: np.ndarray,
         reference_sr: ``reference_audio`` 的采样率（Kokoro 是 24 kHz）。
         voice: 合成参考时用的 Kokoro 音色（记入日志）。
         is_reference: 标记这是参考自测。现在收下是为了签名稳定；这里的诚实打分逻辑不变。
+        style: 展示样式 ``none`` / ``dj44`` / ``dj48``。默认 ``none`` 保持今日行为；
+            非空时只改写 ``ipa_words[*].expected`` / ``heard`` / ``ok`` 的展示，
+            不影响对齐、``_PHONE_FOLD``、分数。
     返回：
         PronunciationResult，含分数、逐词/逐音素标记和转写。
         ``prosody`` 留空；主机从原始波形自己填。
@@ -1266,6 +1423,34 @@ def analyze(user_audio: np.ndarray,
     tokens = expected_text.split()
     _recalled, heard, word_dist = _word_recall(groups, result.pairs)
     ipa_words = build_ipa_words(tokens, groups, result.pairs, spoken_spans)
+    # 展示样式（dj44/dj48）：只改写 ipa_words 的 expected/heard/ok 显示，
+    # 不动对齐、fold、分数。expected 用未折叠 raw 音素（保留 æ/ɐ/ɹ/ː），
+    # heard 用已折叠的识别音素逐槽位样式，ok 跟着 heard。
+    if style:
+        from pronounce.phonemes.style import normalize_style as _norm_style
+
+        st = _norm_style(style)
+        if st != "none":
+            if expected_ipa:
+                raw_groups = [_tokenize_ipa(expected_ipa.strip())]
+            else:
+                raw_groups = reference_word_phonemes_raw(
+                    expected_text, cfg.espeak_language
+                )
+            for wi, word in enumerate(ipa_words):
+                raw_exp = (
+                    raw_groups[wi] if wi < len(raw_groups) else word["expected"]
+                )
+                exp_s, heard_s, ok_s = style_ipa_word_entry(
+                    expected_raw=raw_exp,
+                    heard_folded=word["heard"],
+                    ok_folded=word["ok"],
+                    lang=cfg.espeak_language,
+                    style=st,
+                )
+                word["expected"] = exp_s
+                word["heard"] = heard_s
+                word["ok"] = ok_s
     # 与分数同一套过量产出惩罚：把每个词的距离往 bad 锚点推，很长、完全不同的句子
     # 会涂成红，而不是靠碰巧匹配涂成全绿。
     overprod = _overproduction_penalty(len(reference), len(spoken))

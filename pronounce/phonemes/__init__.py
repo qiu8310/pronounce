@@ -6,6 +6,7 @@ import argparse
 import json
 
 from pronounce.phonemes.ipa import ipa_for_text
+from pronounce.phonemes.style import normalize_style
 
 __all__ = ["add_parser", "ipa_for_text", "run"]
 
@@ -15,13 +16,15 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     phonemes = sub.add_parser("phonemes", help="dictionary IPA for people to read")
     phonemes.add_argument("--text", required=True)
     phonemes.add_argument("--lang", default="en-us")
+    phonemes.add_argument("--style", default="none")
     phonemes.set_defaults(func=run)
 
 
 def run(args: argparse.Namespace) -> int:
     """执行 phonemes：stdout 打一份 JSON（含 ipa 和逐词 rows）。"""
     try:
-        payload = ipa_for_text(args.text, lang=args.lang)
+        style = normalize_style(getattr(args, "style", None))
+        payload = ipa_for_text(args.text, lang=args.lang, style=style)
         print(
             json.dumps(
                 {
@@ -29,6 +32,7 @@ def run(args: argparse.Namespace) -> int:
                     "command": "phonemes",
                     "text": args.text,
                     "lang": args.lang,
+                    "style": style,
                     # **payload 把 ipa / words 解包进外层字典，避免再套一层。
                     **payload,
                 }
