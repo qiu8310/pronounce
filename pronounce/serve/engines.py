@@ -8,24 +8,48 @@ from pronounce.phonemes.style import normalize_style
 from pronounce.tts import to_file as tts_to_file
 from pronounce.tts.kokoro import load_tts
 
-# Phoneme AnalyzerConfig is process-global; serialize configure+analyze under ThreadingHTTPServer.
-_score_lock = threading.Lock()
+_phoneme_lock = threading.Lock()
+_acoustic_lock = threading.Lock()
 
-__all__ = ["warmup", "tts_to_file", "dictionary_ipa", "score_phoneme"]
+__all__ = [
+    "warmup",
+    "tts_to_file",
+    "dictionary_ipa",
+    "score_phoneme",
+    "score_acoustic",
+]
 
 
 def warmup(device: str = "cpu") -> None:
-    from pronounce.score.phoneme import AnalyzerConfig, configure, load_models
+    from pronounce.score.acoustic import (
+        AnalyzerConfig as AcousticConfig,
+        configure as configure_acoustic,
+        load_models as load_acoustic,
+    )
+    from pronounce.score.phoneme import (
+        AnalyzerConfig as PhonemeConfig,
+        configure as configure_phoneme,
+        load_models as load_phoneme,
+    )
 
-    with _score_lock:
-        configure(
-            AnalyzerConfig(
+    with _phoneme_lock:
+        configure_phoneme(
+            PhonemeConfig(
                 model_name=str(wav2vec2_model("wav2vec2-xlsr-53-espeak-cv-ft")),
                 device=device,
                 espeak_language="en-us",
             )
         )
-        load_models()
+        load_phoneme()
+    with _acoustic_lock:
+        configure_acoustic(
+            AcousticConfig(
+                model_name=str(wav2vec2_model("wav2vec2-large-960h")),
+                device=device,
+                espeak_language="en-us",
+            )
+        )
+        load_acoustic()
     load_tts(device)
 
 
@@ -54,7 +78,7 @@ def score_phoneme(
 ) -> dict:
     from pronounce.score.jobs import score_phoneme as _score_phoneme
 
-    with _score_lock:
+    with _phoneme_lock:
         return _score_phoneme(
             text=text,
             user_wav=user_wav,
@@ -63,4 +87,24 @@ def score_phoneme(
             device=device,
             ipa=ipa,
             style=style,
+        )
+
+
+def score_acoustic(
+    *,
+    text: str,
+    user_wav: str,
+    ref_wav: str,
+    lang: str = "en-us",
+    device: str = "cpu",
+) -> dict:
+    from pronounce.score.jobs import score_acoustic as _score_acoustic
+
+    with _acoustic_lock:
+        return _score_acoustic(
+            text=text,
+            user_wav=user_wav,
+            ref_wav=ref_wav,
+            lang=lang,
+            device=device,
         )

@@ -8,10 +8,12 @@ import numpy as np
 
 
 class TestScorePhonemeLock(unittest.TestCase):
-    def test_score_lock_is_threading_lock(self):
+    def test_score_locks_are_threading_locks(self):
         from pronounce.serve import engines
 
-        self.assertIsInstance(engines._score_lock, type(threading.Lock()))
+        lock_type = type(threading.Lock())
+        self.assertIsInstance(engines._phoneme_lock, lock_type)
+        self.assertIsInstance(engines._acoustic_lock, lock_type)
 
     def test_concurrent_score_configure_analyze_serialized(self):
         """Two score_phoneme calls must not overlap configure/analyze."""
