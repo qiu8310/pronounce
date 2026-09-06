@@ -476,7 +476,7 @@ Three separate pipelines — US, GB, and RP rules are not mixed.
 
 - Flap **`ɾ→t`** (lossy; espeak US uses `ɾ` for underlying `/t/` — e.g. *city*; does not distinguish *latter* vs *ladder*).
 - Rhotic splits to teaching **`V+r`** (`ɚ→ər`, `ɝ→ɜːr`, `ɑːɹ→ɑːr`, …).
-- **`oʊ→əʊ`**; short CLOTH **`ɔ→ɔː`** (not already-long `ɔː` or CHOICE `ɔɪ`).
+- Keep GOAT **`oʊ`** (no map to `əʊ`); short CLOTH **`ɔ→ɔː`** (not already-long `ɔː` or CHOICE `ɔɪ`).
 - Keeps US **`ɑː`** for LOT∪PALM; does not invent `ɒ`.
 
 **`en-gb`** (GB-only; no US flap/rhotic/`oʊ`/`ɔ→ɔː`):

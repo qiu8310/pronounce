@@ -20,7 +20,7 @@ def _us_pre(s: str) -> str:
     s = s.replace("ɛɹ", "er")
     s = s.replace("ʊɹ", "ʊr")
     s = s.replace("ɾ", "t")
-    s = s.replace("oʊ", "əʊ")
+    # Keep GOAT oʊ (do not Anglicize to əʊ).
     s = _SHORT_CLOTH.sub("ɔː", s)
     return s
 

@@ -61,7 +61,7 @@ Resident HTTP (loopback only): see [Serve](#serve). Isolated phones use `--ipa` 
 
 ### Display style (`--style`)
 
-Optional China-textbook DJ rewrite on `phonemes` and `score phoneme` (CLI + serve). `none` or omit = raw espeak IPA. `dj44` = glyph renames without cluster merges; `dj48` adds same-word `tr` / `dr` / `ts` / `dz` merges. Three separate per-lang pipelines — US (`ɾ→t`, rhotic splits, `oʊ→əʊ`, short `ɔ→ɔː`, `ɑː` LOT∪PALM), GB (TRAP `a→æ`, BATH often short), RP (`en-gb-x-rp`, BATH `ɑː` from G2P). Score grades and `_PHONE_FOLD` alignment are unchanged; only `ipa_words` display (and `phonemes` IPA strings) are styled. Details: [`FIELDS.md`](FIELDS.md#display-style-style).
+Optional China-textbook DJ rewrite on `phonemes` and `score phoneme` (CLI + serve). `none` or omit = raw espeak IPA. `dj44` = glyph renames without cluster merges; `dj48` adds same-word `tr` / `dr` / `ts` / `dz` merges. Three separate per-lang pipelines — US (`ɾ→t`, rhotic splits, keep `oʊ`, short `ɔ→ɔː`, `ɑː` LOT∪PALM), GB (TRAP `a→æ`, BATH often short), RP (`en-gb-x-rp`, BATH `ɑː` from G2P). Score grades and `_PHONE_FOLD` alignment are unchanged; only `ipa_words` display (and `phonemes` IPA strings) are styled. Details: [`FIELDS.md`](FIELDS.md#display-style-style).
 
 ## Model paths
 

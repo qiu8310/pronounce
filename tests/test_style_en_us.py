@@ -15,7 +15,7 @@ class TestEnUsStyle(unittest.TestCase):
         self.assertEqual(style_word("tˈiːtʃɚ", style="dj44"), "tˈiːtʃər")
 
     def test_dj44_go(self):
-        self.assertEqual(style_word("ɡˈoʊ", style="dj44"), "gˈəʊ")
+        self.assertEqual(style_word("ɡˈoʊ", style="dj44"), "gˈoʊ")
 
     def test_dj44_coffee_cloth(self):
         self.assertEqual(style_word("kˈɔfi", style="dj44"), "kˈɔːfi")
